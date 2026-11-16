@@ -190,6 +190,31 @@ test('offline ceremony: genesis, CLI contribution, isolated verification, beacon
       contributions: [{ sharedBlobId: 'final-blob', file: path.join(tmp, 'unused.p2c') }],
     }), /closed ceremony has no accepted non-beacon contribution/);
   });
+  await t.test('audit rejects a transcript with a beacon entry before the final beacon', async () => {
+    const firstBeaconZkey = path.join(tmp, 'first-beacon.zkey');
+    const twoBeaconZkey = path.join(tmp, 'two-beacon.zkey');
+    const first = await snarkjs.zKey.beacon(baseZkey, firstBeaconZkey, 'early-beacon', '11'.repeat(32), 10, snLog);
+    const last = await snarkjs.zKey.beacon(firstBeaconZkey, twoBeaconZkey, 'final-beacon', BEACON, 10, snLog);
+    const info = await readContributionInfo(twoBeaconZkey);
+    assert.deepEqual(info.contributions.map((entry) => entry.type), [1, 1]);
+    await assert.rejects(verifyFinalArtifacts({
+      ...auditArgs,
+      ceremony: {
+        ...ceremony,
+        chain: [
+          { blob_id: 'early-blob', contribution_hash: Buffer.from(first).toString('base64'), name: 'early-beacon' },
+          { blob_id: 'final-blob', contribution_hash: Buffer.from(last).toString('base64'), name: 'final-beacon' },
+        ],
+      },
+      finalZkey: twoBeaconZkey,
+      // Rejection must happen before reading params or the verification key.
+      finalVkey: path.join(tmp, 'unused.vkey.json'),
+      contributions: [
+        { sharedBlobId: 'early-blob', file: path.join(tmp, 'unused.p2c') },
+        { sharedBlobId: 'final-blob', file: path.join(tmp, 'unused.p2c') },
+      ],
+    }), /final zkey has a beacon entry before the last entry/);
+  });
   for (const [name, change, error] of [
     ['phase-1 commitment', (j) => { j.phase1_digest = b64('00'.repeat(64)); }, /phase-1 digest mismatch/],
     ['beacon', (j) => { j.final_beacon = b64('00'.repeat(32)); }, /beacon does not match/],

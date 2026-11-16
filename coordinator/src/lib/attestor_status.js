@@ -1,8 +1,10 @@
 // Public, in-memory observations only. Never expose run files, funding receipts,
 // private URLs, or raw exceptions through the monitor.
 export class AttestorStatus {
-  constructor({ network, ceremonyId, pollMs, now = Date.now }) {
+  constructor({ network, ceremonyId, title = null, pollMs, now = Date.now }) {
     this.network = network;
+    // Public title of the ceremony for the status page, or null.
+    this.title = title;
     this.ceremonyId = ceremonyId;
     this.now = now;
     this.pollGraceMs = Math.max(30_000, pollMs * 3);
@@ -56,7 +58,7 @@ export class AttestorStatus {
     const stale = now >= this.staleAt;
     const ok = !!this.ceremony && !this.error && this.state !== 'starting' && !stale;
     return {
-      ok, asOf: now, network: this.network, ceremonyId: this.ceremonyId,
+      ok, asOf: now, network: this.network, ceremonyId: this.ceremonyId, title: this.title,
       attestor: {
         state: this.state, detail: this.detail, stale,
         startedAt: this.startedAt, activityAt: this.activityAt,

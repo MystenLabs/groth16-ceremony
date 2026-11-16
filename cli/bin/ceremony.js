@@ -6,7 +6,7 @@
 //
 // How it works:
 // 1. Read the ceremony from Sui. The ceremony ID comes from the command line or
-//    from `ceremony.json` at the repository root.
+//    from `ceremonies/<name>/ceremony.json`.
 // 2. Ask for the funding link, the public name, and extra randomness. Then ask
 //    the user to confirm. Flags answer these questions for scripts.
 // 3. Prepare: make sure that the contribution key has enough SUI and WAL.
@@ -36,7 +36,7 @@ import path from 'node:path';
 import os from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { SuiGrpcClient } from '@mysten/sui/grpc';
-import { normalizeSuiAddress } from '@mysten/sui/utils';
+import { isValidSuiAddress, normalizeSuiAddress } from '@mysten/sui/utils';
 import { randomEntropy, exportSecretKey, generateKey, restoreKey, contribute, compress, decompress } from '../src/crypto.js';
 import { fetchBlob, uploadToWalrus, resolveSharedBlobContent } from '../src/walrus.js';
 import { reportQueueActivity } from '../src/queue-activity.js';
@@ -44,10 +44,10 @@ import { ensureFunding, selectFundingMode, validatePublicCoordinatorUrl, require
 import { readHead, submitContribution, awaitVerdict, sweepFunds, claimWhenOpen, parsePollInterval } from '../src/chain.js';
 import { fundingDefaults } from '../src/funding-policy.js';
 import { requireAttestorHealthy } from '../src/health.js';
-import { CEREMONY_ID, readCeremonyConfig, resolveWorkdir, startRunLog, recordRunLog, redact } from '../src/run-context.js';
+import { CEREMONY_ID, findCeremonyById, readCeremonyConfig, resolveWorkdir, startRunLog, recordRunLog, redact } from '../src/run-context.js';
 import { createUi, formatDuration, visibleText } from '../src/ui.js';
 import { askLine, askHidden, askYesNo } from '../src/prompt.js';
-import { explainFailure, errorMessage } from '../src/failures.js';
+import { explainFailure, errorMessage, assertTurnOpen, UPLOAD_MARGIN_MS } from '../src/failures.js';
 import { renderResultCard } from '../src/result-card.js';
 
 // gRPC is the supported transport; JSON-RPC is deprecated (deactivation July 2026).
@@ -82,8 +82,11 @@ const DEFAULT_TITLE = 'Trusted-setup ceremony';
 const HELP = `ceremony v${VERSION} — contribute to a trusted-setup ceremony
 
 Usage:
-  ceremony contribute [options]   contribute to the ceremony in ceremony.json
-  ceremony refund [options]       send the key's leftover funds back
+  ceremony contribute [name] [options]   contribute to the named ceremony
+  ceremony refund [name] [options]       send the key's leftover funds back
+
+The name is a folder in ceremonies/, for example zklogin-v2. You can omit the
+name when the repository has one ceremony.
 
 The CLI reads the ceremony from Sui, waits for your turn, computes your
 contribution, uploads it to Walrus, and submits it on-chain. It asks for the
@@ -97,8 +100,8 @@ Options:
   --help              show this text
 
 Advanced options (scripts and rehearsals):
-  --ceremony <id>     contribute to this ceremony instead of the one in ceremony.json
-  --network <n>       testnet | mainnet (default: ceremony.json, else testnet)
+  --ceremony <id>     contribute to this ceremony object instead of a named ceremony
+  --network <n>       testnet | mainnet (default: the ceremony file, else testnet)
   --funding-url <url> private funding link (or CEREMONY_FUNDING_URL); prefer the prompt,
                       because a link on the command line stays in shell history
   --self-funded       fund the contribution address yourself; skip the funding question
@@ -109,6 +112,9 @@ Advanced options (scripts and rehearsals):
                       override the coordinator URL from the ceremony (local rehearsals)
   --poll-interval <s> seconds between slot and balance checks (default: 30)
   --to <addr>         refund: send funds here instead of to the organizer
+
+The CLI asks questions only on an interactive terminal. In a script, use --name,
+--entropy, and --funding-url or --self-funded. NO_COLOR=1 gives plain text.
 `;
 
 // Values that the Ctrl-C handler needs while a run is active.
@@ -191,7 +197,9 @@ function loadState(workdir) {
 }
 function saveState(workdir, st) {
   fs.mkdirSync(workdir, { recursive: true });
-  fs.writeFileSync(statePath(workdir), JSON.stringify(st, null, 2));
+  // The file holds the contribution key. Only the owner can read it.
+  fs.writeFileSync(statePath(workdir), JSON.stringify(st, null, 2), { mode: 0o600 });
+  fs.chmodSync(statePath(workdir), 0o600);
 }
 
 // Best-effort: stop the machine from idle-sleeping for the life of this
@@ -205,6 +213,10 @@ function inhibitSleep() {
     if (process.platform === 'linux') {
       const child = spawn('systemd-inhibit',
         ['--what=sleep:idle', '--why=ceremony contribution', 'sleep', 'infinity'], { stdio: 'ignore' });
+      // A missing helper gives an 'error' event. Without a handler, that event stops the CLI.
+      child.on('error', () => {});
+      // Do not let the helper keep the CLI alive after the work is complete.
+      child.unref();
       process.on('exit', () => child.kill());
       return 'systemd-inhibit';
     }
@@ -531,6 +543,7 @@ async function cmdContribute(ceremonyId, opts) {
 
     // 7. Upload.
     stage = 'upload';
+    assertTurnOpen(session.turnEndsAt, 'upload', Date.now(), UPLOAD_MARGIN_MS);
     ui.start('upload', `encoding ${fmtMB(p2c.length)}`);
     const up = await timed(() => uploadToWalrus(suiClient, keypair, network, net, p2c, walrusLog(ui)));
     timings.uploadsec = up.sec;
@@ -539,6 +552,7 @@ async function cmdContribute(ceremonyId, opts) {
 
     // 8. Submit and verify.
     stage = 'verify';
+    assertTurnOpen(session.turnEndsAt, 'submission');
     ui.start('verify', 'submitting on-chain');
     const sd = await submitContribution(suiClient, keypair, head.packageId, ceremonyId, blobId, hashHex, name);
     session.holdingTurn = false;
@@ -753,7 +767,7 @@ function printFailure(ui, title, lines, color = 'red', mark = '✗') {
   ui.print('');
 }
 
-// The key's saved ceremony and network win over ceremony.json. Explicit
+// The key's saved ceremony and network win over the ceremony file. Explicit
 // --ceremony and --network flags win over both.
 async function cmdRefund(ceremonyId, opts) {
   const ui = createUi({ verbose: true, live: false });
@@ -768,6 +782,8 @@ async function cmdRefund(ceremonyId, opts) {
   const target = (opts.explicit.ceremony && ceremonyId) || st.ceremonyId || ceremonyId || null;
   ui.detail(`refund on ${network} for ceremony ${target || 'none'}`);
   let refundAddr = opts.to || null;
+  // normalizeSuiAddress adds zeros to a short address. Refuse a short address instead.
+  if (refundAddr && !isValidSuiAddress(refundAddr)) throw new Error('--to must be a full Sui address: 0x and 64 hex digits');
   if (!refundAddr) {
     if (!target) throw new Error('missing refund target: pass --to <addr> or provide a ceremony id');
     const head = await readHead(suiClient, target);
@@ -813,18 +829,23 @@ try {
   fail(`${e.message}\n\n${HELP}`);
 }
 const { values: opts, positionals } = parsed;
-const [command, ...extra] = positionals;
+const [command, ceremonyName, ...extra] = positionals;
 if (opts.help || !command) {
   console.log(HELP);
   process.exit(opts.help ? 0 : 1);
 }
 if (!['contribute', 'refund'].includes(command)) fail(`unknown command "${command}"\n\n${HELP}`);
-if (extra.length) fail(`unexpected argument "${extra[0]}"; use --ceremony <id> to choose a ceremony`);
+if (extra.length) fail(`unexpected argument "${extra[0]}"`);
+if (ceremonyName && opts.ceremony) fail('Give a ceremony name or --ceremony <id>, not both.');
 
 opts.explicit = { ceremony: !!opts.ceremony, network: !!opts.network };
 let config = null;
-try { config = readCeremonyConfig(REPO_ROOT); } catch (e) {
-  if (!opts.ceremony && command === 'contribute') fail(e.message);
+try {
+  // An object ID can still match a ceremony folder. The folder then gives the network and the title.
+  config = opts.ceremony ? findCeremonyById(REPO_ROOT, opts.ceremony) : readCeremonyConfig(REPO_ROOT, ceremonyName);
+} catch (e) {
+  // A refund with --workdir takes the ceremony from the saved state.
+  if (!(command === 'refund' && opts.workdir && !ceremonyName)) fail(e.message);
 }
 const ceremonyId = (opts.ceremony || config?.ceremonyId || '').toLowerCase() || null;
 if (ceremonyId && !CEREMONY_ID.test(ceremonyId)) fail('The ceremony ID must be 0x followed by 64 hexadecimal characters.');
@@ -859,7 +880,7 @@ let run;
 if (command === 'refund') {
   run = cmdRefund(ceremonyId, opts);
 } else {
-  if (!ceremonyId) fail('No ceremony selected. Add ceremony.json to the repository root, or pass --ceremony <id>.');
+  if (!ceremonyId) fail('No ceremony selected. Give a ceremony name from ceremonies/, or pass --ceremony <id>.');
   try {
     opts.fundingMode = selectFundingMode(opts);
     opts.pollMs = parsePollInterval(opts['poll-interval']);

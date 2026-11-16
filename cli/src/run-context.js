@@ -4,7 +4,8 @@
 // Contributors must not need to type the ceremony ID.
 //
 // How it works:
-// - `ceremony.json` at the repository root names the default ceremony.
+// - Each ceremony has a folder `ceremonies/<name>/` with a `ceremony.json` file.
+// - The user gives the ceremony name. One ceremony in the repository needs no name.
 // - The work directory is `<repository>/ceremony-work/<network>/<ceremony-id>`
 //   unless the user gives `--workdir`.
 // - The progress log removes private values, such as the funding link.
@@ -18,9 +19,30 @@ const NETWORKS = ['testnet', 'mainnet'];
 let logFile;
 let secrets = [];
 
-export function readCeremonyConfig(root) {
-  const file = path.join(root, 'ceremony.json');
-  if (!fs.existsSync(file)) return null;
+// A ceremony name is the name of its folder in `ceremonies/`.
+const CEREMONY_NAME = /^[a-z0-9][a-z0-9-]*$/;
+
+// List the ceremonies in the repository, in alphabetical order.
+export function listCeremonies(root) {
+  const dir = path.join(root, 'ceremonies');
+  if (!fs.existsSync(dir)) return [];
+  return fs.readdirSync(dir)
+    .filter((name) => CEREMONY_NAME.test(name) && fs.existsSync(path.join(dir, name, 'ceremony.json')))
+    .sort();
+}
+
+// Read the configuration of the named ceremony. Without a name, the repository must have one ceremony.
+export function readCeremonyConfig(root, name) {
+  const names = listCeremonies(root);
+  const list = names.length ? ` Available: ${names.join(', ')}.` : '';
+  if (name) {
+    if (!names.includes(name)) throw new Error(`unknown ceremony "${name}".${list}`);
+  } else {
+    if (names.length === 0) return null;
+    if (names.length > 1) throw new Error(`This repository has more than one ceremony. Give the name of your ceremony.${list}`);
+    name = names[0];
+  }
+  const file = path.join(root, 'ceremonies', name, 'ceremony.json');
   let config;
   try { config = JSON.parse(fs.readFileSync(file, 'utf8')); }
   catch { throw new Error(`${file} is not valid JSON`); }
@@ -28,7 +50,17 @@ export function readCeremonyConfig(root) {
     throw new Error(`${file} must set "ceremonyId" (0x and 64 hex characters) and "network" (testnet or mainnet)`);
   }
   const title = typeof config.title === 'string' && config.title.trim() ? config.title.trim() : null;
-  return { ceremonyId: config.ceremonyId.toLowerCase(), network: config.network, title };
+  return { name, ceremonyId: config.ceremonyId.toLowerCase(), network: config.network, title };
+}
+
+// Find the ceremony folder with this ceremony object ID. Return null if no folder has it.
+export function findCeremonyById(root, ceremonyId) {
+  for (const name of listCeremonies(root)) {
+    let config;
+    try { config = readCeremonyConfig(root, name); } catch { continue; }
+    if (config.ceremonyId === String(ceremonyId).toLowerCase()) return config;
+  }
+  return null;
 }
 
 export function resolveWorkdir(options, ceremonyId, root) {

@@ -1,8 +1,11 @@
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
 import {
   CEREMONY_RUNS_ROOT,
+  ceremonyTitle,
   ceremonyRunPaths,
   resolveCeremonyPaths,
   standaloneAuditPaths,
@@ -49,4 +52,20 @@ test('standalone audits isolate a custom work root by ceremony id', () => {
   const paths = standaloneAuditPaths('0xabcdef0123456789', root);
   assert.equal(paths.audit, path.join(root, 'abcdef012345', 'audit'));
   assert.equal(paths.blobs, path.join(root, 'abcdef012345', 'blobs'));
+});
+
+test('the ceremony title comes from the ceremony file with the same network and id', (t) => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'ceremony-title-'));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const id = '0x' + 'a'.repeat(64);
+  assert.equal(ceremonyTitle('testnet', id, root), null);
+  const add = (name, text) => {
+    fs.mkdirSync(path.join(root, 'ceremonies', name), { recursive: true });
+    fs.writeFileSync(path.join(root, 'ceremonies', name, 'ceremony.json'), text);
+  };
+  add('broken', '{');
+  add('other', JSON.stringify({ ceremonyId: '0x' + 'b'.repeat(64), network: 'testnet', title: 'Other' }));
+  add('mine', JSON.stringify({ ceremonyId: id.toUpperCase().replace('0X', '0x'), network: 'testnet', title: ' Mine ' }));
+  assert.equal(ceremonyTitle('testnet', id, root), 'Mine');
+  assert.equal(ceremonyTitle('mainnet', id, root), null);
 });

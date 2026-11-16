@@ -81,8 +81,10 @@ export async function verifyFinalArtifacts({
   assertOk(lastContribution.type === 1, 'final zkey last contribution is not a beacon contribution');
   assertOk(lastContribution.beaconHash === finalBeaconHex, 'final zkey beacon does not match on-chain final beacon');
   // Contribution types live in the artifact transcript, not on-chain entries.
-  assertOk(finalZkeyInfo.contributions.some((entry) => entry.type === 0),
-    'closed ceremony has no accepted non-beacon contribution');
+  // Each entry before the beacon must be a plain contribution, and one must exist.
+  const beforeBeacon = finalZkeyInfo.contributions.slice(0, -1);
+  assertOk(beforeBeacon.length > 0, 'closed ceremony has no accepted non-beacon contribution');
+  assertOk(beforeBeacon.every((entry) => entry.type === 0), 'final zkey has a beacon entry before the last entry');
 
   assertOk(contributions.length === chain.length, 'downloaded contribution count does not match ceremony chain');
   const chainHashes = [];

@@ -1,9 +1,9 @@
 // Run phase-2 verification in isolation so malformed submissions cannot crash
-// the coordinator. The parent handles child crashes, OOMs, and timeouts as rejects.
+// the coordinator. The parent runs a dead or slow child again, then rejects.
 //
 // One final IPC response: a result or error, including locally measured timings.
 //
-// Every caught exception is rethrown by the parent for operator review.
+// The parent rethrows each caught exception. The attestor then tries again.
 
 import { runVerifySteps } from '../crypto/verify_contribution.js';
 import { log } from './config.js';

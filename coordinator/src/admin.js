@@ -33,7 +33,7 @@
 // approve-r1cs   - an auditor attests the r1cs blob is the expected circuit
 // start-phase2   - upload genesis params, seed the head, open contributions
 // reject-pending - manually reject the current Pending contribution and reopen
-//                  the slot (escape hatch for when the attestor halts on it)
+//                  the slot (use it when the attestor cannot verify the submission)
 // finalize-phase2- draw the phase-2 final beacon and freeze contributions
 // seal           - the organizer's final contribution; uploads final params/zkey/vkey and closes
 // submit-final   - close with already-uploaded final params/zkey/vkey SharedBlob ids
@@ -326,6 +326,9 @@ async function rejectPending() {
 }
 
 async function finalizePhase2() {
+  // The beacon is permanent. A package published before the contract check does not refuse an empty chain.
+  const before = await read();
+  if (before.chain.length === 0) { console.error('the ceremony has no accepted contribution; finalize-phase2 is permanent, so it is refused'); process.exit(1); }
   const d = await exec(client, signer(), moveCall('finalize_phase2', (tx) => [tx.object(CAP), tx.object(CER), tx.object(RANDOM)]));
   updateManifest((manifest) => { manifest.finalize_digest = d; });
   const j = await read();
@@ -348,6 +351,7 @@ async function seal() {
     baseZkey: BASE_ZKEY,
     ptau: BASE_PTAU,
     workdir: ARTIFACT_WORKDIR,
+    blobCacheDir: paths.blobs,
     beaconExp: o['beacon-exp'],
     log,
   });

@@ -21,7 +21,7 @@ import { parseArgs } from 'node:util';
 import { Transaction } from '@mysten/sui/transactions';
 import { verifyPhase1Digest } from './crypto/commitments.js';
 import { verifyBaseCircuit } from './crypto/verify_contribution.js';
-import { CLOCK, log, loadIds, resolveBaseArtifacts, resolveCeremonyPaths } from './lib/config.js';
+import { CLOCK, ceremonyTitle, log, loadIds, resolveBaseArtifacts, resolveCeremonyPaths } from './lib/config.js';
 import { makeClient, loadKeypair, readCeremony, parseSlot, exec } from './lib/chain.js';
 import { verifyContribution } from './lib/verify_contribution.js';
 import { readBlob } from './crypto/walrus.js';
@@ -67,6 +67,9 @@ let AIRDROP;
 try { AIRDROP = resolveAirdropAmounts(NETWORK, { sui: o['airdrop-sui'], wal: o['airdrop-wal'] }); }
 catch (e) { console.error(e.message); process.exit(1); }
 const POLL_MS = Number(o['poll-ms'] || process.env.POLL_MS || 5000);
+// Wait time before the attestor tries a failed verification again.
+const VERIFY_RETRY_MS = 60_000;
+const VERIFY_RETRY_MESSAGE = 'Could not verify the pending submission; retrying. Check the attestor log.';
 if (!Number.isSafeInteger(POLL_MS) || POLL_MS < 1 || POLL_MS > 2_147_483_647) {
   console.error('--poll-ms must be a positive integer up to 2147483647');
   process.exit(1);
@@ -95,7 +98,7 @@ const { packageId: PKG, ceremonyId: CER, organizerCapId: CAP } =
 const client = makeClient(NETWORK);
 const attestor = loadKeypair({ workdir: WORKDIR });
 fs.mkdirSync(WORKDIR, { recursive: true });
-const monitor = new AttestorStatus({ network: NETWORK, ceremonyId: CER, pollMs: POLL_MS });
+const monitor = new AttestorStatus({ network: NETWORK, ceremonyId: CER, title: ceremonyTitle(NETWORK, CER), pollMs: POLL_MS });
 
 const ZERO_ID = `0x${'0'.repeat(64)}`;
 
@@ -159,35 +162,34 @@ async function main() {
     });
   }
 
+  // True while the verification of the Pending submission fails with an error.
+  let verifyFailing = false;
   for (;;) {
     try {
       monitor.activity('polling', 'Reading ceremony from Sui');
       const head = await readCeremony(client, CER);
       monitor.observe(head);
       const c = parseSlot(head);
+      if (c.slot !== 'Pending') verifyFailing = false;
+      // monitor.observe clears the error. Keep the failed state until a verification completes.
+      if (verifyFailing) monitor.fail(VERIFY_RETRY_MESSAGE);
       if (c.slot === 'Pending') {
         log(`pending: ${c.name || '?'} by ${c.who?.slice(0, 10)}… shared blob ${c.sharedBlobId?.slice(0, 12)}… hash ${c.contributionHash?.slice(0, 16) || '?'}…`);
 
-        let v;
-        try {
-          v = await verifyContribution({
-            network: NETWORK,
-            client,
-            sharedBlobId: c.sharedBlobId,
-            expectedHash: c.contributionHash,
-            headSharedBlobId: c.headSharedBlobId,
-            baseZkey: BASE_ZKEY,
-            ptau: BASE_PTAU,
-            workdir: WORKDIR,
-            onProgress: (step, graceMs) => monitor.activity('verifying', step, graceMs),
-          });
-        } catch (e) {
-          const reason = e?.message || String(e);
-          log(`  verify error after internal retries: ${reason}; leaving pending for admin`);
-          monitor.fail('Verification stopped; organizer intervention required. Check the attestor log.', { stopped: true });
-          process.exitCode = 1;
-          return;
-        }
+        // An error here keeps the slot Pending. The catch below logs it, and a later poll tries again.
+        verifyFailing = true;
+        const v = await verifyContribution({
+          network: NETWORK,
+          client,
+          sharedBlobId: c.sharedBlobId,
+          expectedHash: c.contributionHash,
+          headSharedBlobId: c.headSharedBlobId,
+          baseZkey: BASE_ZKEY,
+          ptau: BASE_PTAU,
+          workdir: WORKDIR,
+          onProgress: (step, graceMs) => monitor.activity('verifying', step, graceMs),
+        });
+        verifyFailing = false;
 
         monitor.activity(v.ok ? 'accepting' : 'rejecting', 'Submitting the verification verdict to Sui', 120_000);
         if (v.ok) {
@@ -202,10 +204,10 @@ async function main() {
         monitor.observe(await readCeremony(client, CER));
       }
     } catch (e) {
-      monitor.fail('Could not complete the latest ceremony poll or transaction; retrying. Check the attestor log.');
+      monitor.fail(verifyFailing ? VERIFY_RETRY_MESSAGE : 'Could not complete the latest ceremony poll or transaction; retrying. Check the attestor log.');
       log(`loop error: ${e?.message || e}`);
     }
-    await new Promise((r) => setTimeout(r, POLL_MS));
+    await new Promise((r) => setTimeout(r, verifyFailing ? VERIFY_RETRY_MS : POLL_MS));
   }
 }
 

@@ -91,6 +91,22 @@ fun start(sc: &mut ts::Scenario, cap: &OrganizerCap) {
     ts::return_shared(cer);
 }
 
+// Record one accepted contribution from ALICE (head = BLOB1).
+// finalize_phase2 needs one accepted contribution.
+fun accept_one(sc: &mut ts::Scenario, cap: &OrganizerCap) {
+    let clk = clock::create_for_testing(sc.ctx());
+    sc.next_tx(ALICE);
+    let mut cer = sc.take_shared<Ceremony>();
+    groth16_phase2::claim(&mut cer, &clk, sc.ctx());
+    groth16_phase2::submit_contribution(&mut cer, bid(BLOB1), chash(1), string::utf8(b"alice"), &clk, sc.ctx());
+    ts::return_shared(cer);
+    sc.next_tx(ADMIN);
+    let mut cer = sc.take_shared<Ceremony>();
+    groth16_phase2::accept(cap, &mut cer, bid(GENESIS), bid(BLOB1), chash(1), ALICE, &clk);
+    ts::return_shared(cer);
+    clk.destroy_for_testing();
+}
+
 // The full ceremony end to end: create + approve + start, two chained phase-2
 // contributions, then finalize_phase2 -> beacon -> the organizer's sealing
 // contribution (which closes it). Mirrors the on-chain run.
@@ -193,6 +209,21 @@ fun submit_contribution_requires_64_byte_hash() {
     abort 42
 }
 
+// The beacon must not close a ceremony that has no accepted contribution.
+#[test, expected_failure(abort_code = groth16_phase2::ENoContributions)]
+fun finalize_requires_one_contribution() {
+    let mut sc = ts::begin(ADMIN);
+    setup_random(&mut sc);
+    let cap = create(&mut sc);
+    start(&mut sc, &cap);
+
+    sc.next_tx(ADMIN);
+    let mut cer = sc.take_shared<Ceremony>();
+    let rnd = sc.take_shared<Random>();
+    groth16_phase2::finalize_phase2(&cap, &mut cer, &rnd, sc.ctx());
+    abort 42
+}
+
 #[test, expected_failure(abort_code = groth16_phase2::EHeadChanged)]
 fun submit_final_requires_expected_head() {
     let mut sc = ts::begin(ADMIN);
@@ -200,6 +231,7 @@ fun submit_final_requires_expected_head() {
     setup_random(&mut sc);
     let cap = create(&mut sc);
     start(&mut sc, &cap);
+    accept_one(&mut sc, &cap);
 
     sc.next_tx(ADMIN);
     let mut cer = sc.take_shared<Ceremony>();
@@ -210,7 +242,7 @@ fun submit_final_requires_expected_head() {
     groth16_phase2::submit_final(
         &cap,
         &mut cer,
-        bid(BLOB1),
+        bid(GENESIS),
         bid(FINAL),
         chash(3),
         bid(FINAL_ZKEY),
@@ -565,6 +597,7 @@ fun submit_final_rejects_oversized_name() {
     setup_random(&mut sc);
     let cap = create(&mut sc);
     start(&mut sc, &cap);
+    accept_one(&mut sc, &cap);
 
     sc.next_tx(ADMIN);
     let mut cer = sc.take_shared<Ceremony>();
@@ -692,6 +725,7 @@ fun set_access_mode_after_beacon_aborts() {
     setup_random(&mut sc);
     let cap = create(&mut sc);
     start(&mut sc, &cap);
+    accept_one(&mut sc, &cap);
 
     sc.next_tx(ADMIN);
     let mut cer = sc.take_shared<Ceremony>();
@@ -1076,6 +1110,7 @@ fun set_slot_duration_rejected_after_beacon() {
     setup_random(&mut sc);
     let cap = create(&mut sc);
     start(&mut sc, &cap);
+    accept_one(&mut sc, &cap);
     sc.next_tx(ADMIN);
     let mut cer = sc.take_shared<Ceremony>();
     let rnd = sc.take_shared<Random>();

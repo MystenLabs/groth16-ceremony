@@ -82,6 +82,8 @@ const EInvalidUrl: vector<u8> = b"Coordinator URL is too long.";
 const EInvalidSlotDuration: vector<u8> = b"Slot duration must be positive and at most one hour.";
 #[error]
 const ESlotDeadlineOverflow: vector<u8> = b"Slot duration exceeds the remaining timestamp range.";
+#[error]
+const ENoContributions: vector<u8> = b"The ceremony has no accepted contribution.";
 
 // === Constants ===
 
@@ -334,6 +336,8 @@ entry fun finalize_phase2(cap: &OrganizerCap, c: &mut Ceremony, r: &Random, ctx:
     check_cap(cap, c);
     match (&c.phase) { Phase::Phase2Contribute => (), _ => abort EWrongPhase };
     match (&c.slot) { Slot::Open => (), _ => abort ESlotNotOpen };
+    // A beacon on the genesis alone gives parameters with no contributor entropy.
+    assert!(c.chain.length() > 0, ENoContributions);
     let mut gen = random::new_generator(r, ctx);
     c.final_beacon = gen.generate_bytes(32);
     c.phase = Phase::Phase2Beacon;

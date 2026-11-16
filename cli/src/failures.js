@@ -4,8 +4,33 @@
 // Assumptions: The raw error always goes to the progress log as well.
 
 const RETRY = 'Run the same command to try again. Your key and funds are kept.';
+// The slot stays claimed until the turn ends. A new run before that time gets the same short turn.
+const RETRY_AFTER_TURN = 'Wait until your turn ends, then run the same command. Your key and funds are kept.';
+
+// The upload takes about 2.5 minutes. Do not start it with less time than this.
+export const UPLOAD_MARGIN_MS = 3 * 60_000;
+
+// Stop before a step if the turn has ended. The chain refuses a late submission.
+// Stop also if less than marginMs is left, because the step cannot complete in time.
+export function assertTurnOpen(turnEndsAt, step, now = Date.now(), marginMs = 0) {
+  if (!Number.isFinite(turnEndsAt)) return;
+  if (now >= turnEndsAt) throw new Error(`turn ended before the ${step}`);
+  if (now + marginMs >= turnEndsAt) throw new Error(`turn has too little time left for the ${step}`);
+}
 
 const RULES = [
+  {
+    test: /turn ended before the|turn has too little time left/,
+    explain: ({ message }) => {
+      const early = /too little time/.test(message);
+      return {
+        title: early
+          ? 'Your turn has too little time left to complete the contribution.'
+          : 'Your turn ended before the contribution was complete.',
+        lines: [`${capitalize(message)}. Nothing was submitted.`, early ? RETRY_AFTER_TURN : RETRY],
+      };
+    },
+  },
   {
     test: /not on the ceremony's allowlist/,
     explain: ({ address }) => ({
