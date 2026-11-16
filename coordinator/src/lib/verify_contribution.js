@@ -51,8 +51,24 @@ export function checkSubmissionSize(declaredSize) {
   return { ok: true };
 }
 
-// Run verification in a bounded child process.
-// - Child crash/OOM/timeout => reject the submission.
+// Number of child runs before a crash, an OOM or a timeout becomes a reject.
+export const VERIFY_ATTEMPTS = 3;
+
+// Run the isolated verification again if the child died or was too slow.
+// A dead or slow child is not proof of a bad blob. A weak host can cause it.
+// A verdict from a child that completed is final and does not run again.
+export async function runVerifyStepsWithRetries(args, { attempts = VERIFY_ATTEMPTS, run = runVerifyStepsIsolated, onAttempt = () => {} } = {}) {
+  for (let attempt = 1; ; attempt++) {
+    onAttempt(attempt);
+    const { childFailed, ...result } = await run(args);
+    if (!childFailed) return result;
+    log(`  verify attempt ${attempt} of ${attempts} failed: ${result.reason}`);
+    if (attempt >= attempts) return { ...result, reason: `${result.reason} after ${attempts} attempts` };
+  }
+}
+
+// Run verification one time in a bounded child process.
+// - Child crash/OOM/timeout => reject with childFailed set. The caller can run it again.
 // - Any reported exception => rethrow. The attestor then tries again.
 // The child returns all step timings with its final response.
 export function runVerifyStepsIsolated({ headPath, subPath, baseZkey, ptau, workdir, expectedHash }) {
@@ -79,7 +95,7 @@ export function runVerifyStepsIsolated({ headPath, subPath, baseZkey, ptau, work
     const finish = (fn) => { if (!settled) { settled = true; clearTimeout(timer); child.removeAllListeners(); try { child.kill('SIGKILL'); } catch { /* already gone */ } fn(); } };
     const timer = setTimeout(() => {
       outcome = { reason: `malformed submission (verify exceeded ${Math.round(TIMEOUT_MS / 1000)}s; killed)` };
-      finish(() => resolve({ ok: false, ...outcome }));
+      finish(() => resolve({ ok: false, childFailed: true, ...outcome }));
     }, TIMEOUT_MS);
 
     child.once('message', (message) => { outcome = message; });
@@ -97,7 +113,7 @@ export function runVerifyStepsIsolated({ headPath, subPath, baseZkey, ptau, work
         // Log one useful line without dumping the child's stderr.
         const why = diagnosis || stderrTail.trim().split('\n').filter(Boolean).pop();
         if (why) log(`  verify child died (${how}): ${why.slice(0, 200)}`);
-        resolve({ ok: false, reason: `malformed submission (verify process died: ${how})` });
+        resolve({ ok: false, childFailed: true, reason: `malformed submission (verify process died: ${how})` });
       });
     });
 
@@ -162,8 +178,9 @@ export async function verifyContribution({ network, client, sharedBlobId, headSh
 
   // position (extends head by one) + validity (reinject base, verify from genesis).
   log('  verifying contribution in child process…');
-  onProgress('Checking contribution cryptography', verificationTimeoutMs() + 60_000);
-  const result = await runVerifyStepsIsolated({ headPath, subPath, baseZkey, ptau, workdir, expectedHash });
+  // Each attempt gets a new period on the status page.
+  const onAttempt = () => onProgress('Checking contribution cryptography', verificationTimeoutMs() + 60_000);
+  const result = await runVerifyStepsWithRetries({ headPath, subPath, baseZkey, ptau, workdir, expectedHash }, { onAttempt });
   Object.assign(timings, result.timings);
   return finish({ blobId, ...result });
 }

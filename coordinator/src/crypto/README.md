@@ -55,7 +55,8 @@ failures. Errors outside the wrapper leave the slot pending. The attestor loop
 then tries the verification again at each poll. Callers do not inspect snarkjs error types, codes, or message text.
 The expected contribution hash is mandatory in the cryptographic workflow,
 including for benchmark and test callers; no mode skips the comparison.
-Worker crashes and timeouts also reject. The attestor only submits the resulting
+A worker that crashes or exceeds its time limit runs again, and the third failure
+rejects. The attestor only submits the resulting
 verdict, bound to the head, contributor, blob, and hash it read.
 The worker measures its steps locally and sends one final result/error with
 timings. A crash or timeout has no worker timings; the parent still reports

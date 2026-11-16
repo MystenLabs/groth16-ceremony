@@ -1,6 +1,7 @@
 // Contribution-error classification and pre-download size policy. Explicit
 // failed checks and all wrapped snarkjs exceptions reject, including operational
-// errors. Worker crashes/timeouts also reject.
+// errors. A read error of the submission file throws. Worker crashes/timeouts
+// reject after VERIFY_ATTEMPTS runs.
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -11,6 +12,8 @@ import * as snarkjs from 'snarkjs';
 import { writeR1cs } from 'r1csfile';
 import {
   runVerifyStepsIsolated,
+  runVerifyStepsWithRetries,
+  VERIFY_ATTEMPTS,
   checkSubmissionSize,
   MAX_SUBMISSION_BYTES,
 } from '../src/lib/verify_contribution.js';
@@ -29,7 +32,7 @@ test('runVerifySteps requires a well-formed expected hash before reading files',
   }
 });
 
-test('runVerifySteps rejects malformed inputs and filesystem errors', { timeout: 90_000 }, async (t) => {
+test('runVerifySteps rejects malformed inputs and throws on a missing submission file', { timeout: 90_000 }, async (t) => {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'ceremony-verify-reject-'));
   t.after(() => fs.rmSync(tmp, { recursive: true, force: true }));
 
@@ -241,6 +244,57 @@ test('runVerifySteps rejects malformed inputs and filesystem errors', { timeout:
   });
 });
 
+test('a dead or slow child runs again, and a verdict does not', async (t) => {
+  const died = { ok: false, childFailed: true, reason: 'malformed submission (verify process died: signal SIGKILL)' };
+  const runner = (results) => {
+    const calls = { count: 0 };
+    return { calls, run: async () => results[Math.min(calls.count++, results.length - 1)] };
+  };
+
+  await t.test('a child that dies each time rejects after the last attempt', async () => {
+    const { calls, run } = runner([died]);
+    const result = await runVerifyStepsWithRetries({}, { run });
+    assert.equal(calls.count, VERIFY_ATTEMPTS);
+    assert.equal(VERIFY_ATTEMPTS, 3);
+    assert.deepEqual(result, { ok: false, reason: `${died.reason} after 3 attempts` });
+  });
+
+  await t.test('a child that dies one time and then accepts gives an accept', async () => {
+    const { calls, run } = runner([died, { ok: true, timings: { extends: 1 } }]);
+    const result = await runVerifyStepsWithRetries({}, { run });
+    assert.equal(calls.count, 2);
+    assert.deepEqual(result, { ok: true, timings: { extends: 1 } });
+  });
+
+  await t.test('a reject from a child that completed is final', async () => {
+    const { calls, run } = runner([{ ok: false, reason: 'does not extend head (v2paramsExtends)' }]);
+    const result = await runVerifyStepsWithRetries({}, { run });
+    assert.equal(calls.count, 1);
+    assert.equal(result.ok, false);
+  });
+
+  await t.test('an error from the child is not caught', async () => {
+    const run = async () => { throw Object.assign(new Error('ENOENT'), { code: 'EVERIFYCHILD' }); };
+    await assert.rejects(runVerifyStepsWithRetries({}, { run }), /ENOENT/);
+  });
+
+  await t.test('a real timeout is marked for a new run', async () => {
+    const previous = process.env.VERIFY_TIMEOUT_MS;
+    process.env.VERIFY_TIMEOUT_MS = '1';
+    try {
+      const attempts = [];
+      const result = await runVerifyStepsWithRetries({ expectedHash: '00'.repeat(64) }, { onAttempt: (n) => attempts.push(n) });
+      assert.deepEqual(attempts, [1, 2, 3]);
+      assert.equal(result.ok, false);
+      assert.match(result.reason, /verify exceeded .* after 3 attempts/);
+      assert.equal('childFailed' in result, false);
+    } finally {
+      if (previous === undefined) delete process.env.VERIFY_TIMEOUT_MS;
+      else process.env.VERIFY_TIMEOUT_MS = previous;
+    }
+  });
+});
+
 test('checkSubmissionSize enforces a fixed upper bound', () => {
   // A real full p2c for the 2^21 circuit is ~120 MB; it must pass, so the limit
   // has to sit above it, not below.
@@ -319,6 +373,7 @@ test('runVerifyStepsIsolated survives a blob that kills the process it parses in
     const r = await runVerifyStepsIsolated({ ...args, subPath: evil });
     assert.equal(r.ok, false);
     assert.match(r.reason, /malformed submission \(verify process died/);
+    assert.equal(r.childFailed, true);
   });
 
   await t.test('a local artifact problem rejects through the worker', async () => {

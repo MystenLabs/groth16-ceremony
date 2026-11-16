@@ -1,5 +1,5 @@
 // Run phase-2 verification in isolation so malformed submissions cannot crash
-// the coordinator. The parent handles child crashes, OOMs, and timeouts as rejects.
+// the coordinator. The parent runs a dead or slow child again, then rejects.
 //
 // One final IPC response: a result or error, including locally measured timings.
 //
