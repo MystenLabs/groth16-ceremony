@@ -326,6 +326,9 @@ async function rejectPending() {
 }
 
 async function finalizePhase2() {
+  // The beacon is permanent. A package published before the contract check does not refuse an empty chain.
+  const before = await read();
+  if (before.chain.length === 0) { console.error('the ceremony has no accepted contribution; finalize-phase2 is permanent, so it is refused'); process.exit(1); }
   const d = await exec(client, signer(), moveCall('finalize_phase2', (tx) => [tx.object(CAP), tx.object(CER), tx.object(RANDOM)]));
   updateManifest((manifest) => { manifest.finalize_digest = d; });
   const j = await read();
