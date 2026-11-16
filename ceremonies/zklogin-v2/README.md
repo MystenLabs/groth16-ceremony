@@ -28,15 +28,15 @@ Then the CLI shows a summary and asks you to confirm. After that you can walk aw
 The run looks like this:
 
 ```text
-  ✓ Prepare              received 0.06 SUI, 0.30 WAL from the organizer
+  ✓ Prepare              received 0.10 SUI, 6.00 WAL from the organizer
   ✓ Wait for your turn   waited 12m 04s
-  ✓ Download             113.8 MB in 7s
+  ✓ Download             122.5 MB in 10s
   ⠸ Compute              ██████████░░░░░░░░░░  52%  1m 38s
   · Upload
   · Submit and verify
 
   Your turn ends in 11m 20s. Keep this terminal open.
-  Log: ceremony-work/testnet/0xbdd9…/logs/contributor.log
+  Log: ceremony-work/mainnet/0x…/logs/contributor.log
 ```
 
 The steps are:
@@ -45,7 +45,7 @@ The steps are:
 2. **Wait for your turn.** One contributor has the slot at a time. The CLI claims the slot when it is free.
    A turn has a time limit, 15 minutes by default, from the claim to the submission.
    The CLI does not start the upload with less than 3 minutes left in the turn.
-3. **Download.** It gets the current parameters from Walrus, about 115 MB, and checks them
+3. **Download.** It gets the current parameters from Walrus, about 123 MB, and checks them
    against the content ID on-chain.
 4. **Compute.** It adds your contribution.
 5. **Upload.** It stores the result on Walrus.
@@ -110,9 +110,14 @@ The folder is inside the clone and does not depend on your current directory.
 
 | Item | Value |
 | --- | --- |
-| Circuit | zkLogin v2 |
-| Network and ceremony object | Named in [`ceremony.json`](ceremony.json) |
-| Phase 1 | `challenge_0087` of the Perpetual Powers of Tau (86 contributions), reduced from 2^28 to 2^21, with drand round 6440000 as the final beacon |
+| Circuit | zkLogin v2, built with `circom --O2`. It has 1,997,333 constraints. The circuit source is not public, so these hashes of the R1CS file identify it. |
+| R1CS `sha256` | `e7d9cb1336140b231d07235fee157403f3932b51fb4a1017a750fd284c3d894d` |
+| R1CS `b2sum` | `bc8cdc434586a667aca8f5ab7c11ee14ece87e231570c43845a1cb0a8d82b268ed5dff1388f642476ad6c94c2f1451419e0a93ea57b8eb187163702f14af142f` |
+| R1CS on Walrus | Blob id `kQP5kFOpd6GN48C5B2vBaZqWwyEaeIHrGc9Eb4x_Ods`. The `r1cs_blob_id` field of the ceremony object is the shared blob object `0xa30ba93ee67719f124f4b1b374e3123d4679ddc97121cb948928c131a9341991`. |
+| Network | Sui mainnet |
+| Ceremony object | `0xed7a3922c4eb8c7efa4392b5918118ef73f865a362a54d1260c0cbbc83e6bb71`, also in [`ceremony.json`](ceremony.json) |
+| Move package | `0x59c61edc0603f301b0295a5d2a9ace510bd26df2c4ca64c8dc91aecc75d08a28` |
+| Phase 1 | Contribution `0086` of the Perpetual Powers of Tau, reduced from 2^28 to 2^21, with drand round 6440000 as the final beacon. Its chain has 67 contributions, because the chain continues from contribution `0058` at contribution `0078`. |
 | Phase 1 file | `ppot_0086_21.ptau`, Walrus blob id `8V0atXFR_OLyOzdVtLQ9IN6H88PQmgE9YgSD7BbeqIE`. The [prepared files page](https://github.com/mahdi-mysten/perpetualpowersoftau/tree/ppot-0086-prepared#prepared-and-truncated-files) shows how to get and verify it. |
 | Phase 1 `b2sum` | `c9972d6f19100faad8382a585dac7fed6090320228c1bb0e64e32cc5689c340e4e8aeb4790eb1297649de83a798b4cebe624d9da4e74fa94d8767c4047c12a62`. The `phase1_digest` field of the ceremony object must have the same value. |
 | Final beacon of phase 2 | Drawn on-chain from Sui randomness when the organizer ends the contributions |

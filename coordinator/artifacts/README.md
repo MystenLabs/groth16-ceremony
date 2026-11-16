@@ -15,8 +15,9 @@ zkey before closing, then writes and uploads `final.p2c`, `final.zkey`, and
 `final.vkey.json`.
 
 How they're produced: `pot_final.ptau` is the phase-1 file for zkLogin v2. Its
-base is `challenge_0087` of the Perpetual Powers of Tau (86 contributions). It
-is reduced from 2^28 to 2^21. The final beacon is drand round 6440000. Its
+base is contribution `0086` of the Perpetual Powers of Tau. Its chain has 67
+contributions, because the chain continues from contribution `0058` at
+contribution `0078`. It is reduced from 2^28 to 2^21. The final beacon is drand round 6440000. Its
 BLAKE2b-512 / `b2sum` is the on-chain `phase1_digest`. `create.js --ptau`
 computes that digest from the file.
 
