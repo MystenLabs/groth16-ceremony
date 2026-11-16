@@ -55,6 +55,8 @@ Check these items on the machine that runs the coordinator:
 - A supervisor (for example a systemd unit) restarts the attestor after a crash.
   A terminal multiplexer session does not do that.
 - The Sui CLI active address is the organizer wallet, and it has SUI and WAL.
+- The disk has free space for the run. The attestor keeps each submitted blob in
+  `blobs/`, also a rejected one, and each blob can be up to 256 MiB.
 
 The pinned snarkjs fork currently leaves a phase-1 ptau `FileHandle` for garbage
 collection after some verification paths. Node 24 reports this as a non-fatal
@@ -167,6 +169,16 @@ The base zkey defaults to the run's `artifacts/`; the ptau path comes from
 node coordinator/src/attestor.js --run "$RUN" --network "$NETWORK" --port 8090
 ```
 
+The attestor has these rules:
+
+- A submission with a beacon entry gets a reject. Only the organizer adds a beacon
+  entry, at the seal. Do not run this attestor on a ceremony whose head already
+  contains a beacon entry, because it then rejects each submission.
+- A verification child that dies or exceeds its time limit runs again. The third
+  failure gives a reject. The time limit is 10 minutes (`VERIFY_TIMEOUT_MS`).
+- A local fault, for example a blob that it cannot read, gives no verdict. The slot
+  stays pending and the attestor tries again after 60 seconds. Read the attestor log.
+
 ### 6. Admit contributors
 
 ```sh
@@ -204,6 +216,8 @@ See [Automatic contributor funding](funding.md) for the funding commands and the
 ### 7. Conclude phase 2
 
 `finalize-phase2` draws the final beacon and is permanent.
+The contract refuses it while the ceremony has no accepted contribution.
+`admin.js` also refuses it, which protects a package published before this rule.
 Seal requires the same local `BASE_ZKEY`/`BASE_PTAU` artifacts as the attestor,
 writes verified `final.{p2c,zkey,vkey.json}`, uploads all three to Walrus, and closes.
 
