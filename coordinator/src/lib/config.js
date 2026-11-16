@@ -22,6 +22,21 @@ export const RANDOM = '0x8';
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 export const REPO_ROOT = path.resolve(HERE, '..', '..', '..');
 export const CEREMONY_RUNS_ROOT = path.join(REPO_ROOT, 'ceremony-runs');
+
+// Find the public title of a ceremony in `ceremonies/<name>/ceremony.json`. Return null if no file matches.
+export function ceremonyTitle(network, ceremonyId, root = REPO_ROOT) {
+  const dir = path.join(root, 'ceremonies');
+  if (!fs.existsSync(dir)) return null;
+  for (const name of fs.readdirSync(dir).sort()) {
+    let config;
+    try { config = JSON.parse(fs.readFileSync(path.join(dir, name, 'ceremony.json'), 'utf8')); } catch { continue; }
+    const sameCeremony = String(config?.ceremonyId || '').toLowerCase() === String(ceremonyId).toLowerCase();
+    if (sameCeremony && config.network === network && typeof config.title === 'string' && config.title.trim()) {
+      return config.title.trim();
+    }
+  }
+  return null;
+}
 const ARTIFACTS = path.join(REPO_ROOT, 'coordinator', 'artifacts');
 
 export const ts = () => new Date().toISOString();

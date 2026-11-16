@@ -52,3 +52,9 @@ test('public status projects only ceremony fields and caps recent entries', () =
   assert.equal(result.ceremony.slot.until, 123456);
   assert.doesNotMatch(JSON.stringify(result), /must-not-leak/);
 });
+
+test('the snapshot gives the ceremony title, or null without one', () => {
+  const base = { network: 'testnet', ceremonyId: '0x1', pollMs: 5000 };
+  assert.equal(new AttestorStatus(base).snapshot().title, null);
+  assert.equal(new AttestorStatus({ ...base, title: 'zkLogin v2' }).snapshot().title, 'zkLogin v2');
+});

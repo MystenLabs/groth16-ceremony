@@ -21,7 +21,7 @@ import { parseArgs } from 'node:util';
 import { Transaction } from '@mysten/sui/transactions';
 import { verifyPhase1Digest } from './crypto/commitments.js';
 import { verifyBaseCircuit } from './crypto/verify_contribution.js';
-import { CLOCK, log, loadIds, resolveBaseArtifacts, resolveCeremonyPaths } from './lib/config.js';
+import { CLOCK, ceremonyTitle, log, loadIds, resolveBaseArtifacts, resolveCeremonyPaths } from './lib/config.js';
 import { makeClient, loadKeypair, readCeremony, parseSlot, exec } from './lib/chain.js';
 import { verifyContribution } from './lib/verify_contribution.js';
 import { readBlob } from './crypto/walrus.js';
@@ -98,7 +98,7 @@ const { packageId: PKG, ceremonyId: CER, organizerCapId: CAP } =
 const client = makeClient(NETWORK);
 const attestor = loadKeypair({ workdir: WORKDIR });
 fs.mkdirSync(WORKDIR, { recursive: true });
-const monitor = new AttestorStatus({ network: NETWORK, ceremonyId: CER, pollMs: POLL_MS });
+const monitor = new AttestorStatus({ network: NETWORK, ceremonyId: CER, title: ceremonyTitle(NETWORK, CER), pollMs: POLL_MS });
 
 const ZERO_ID = `0x${'0'.repeat(64)}`;
 

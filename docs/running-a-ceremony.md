@@ -1,7 +1,8 @@
 # Running a ceremony
 
 This document is for the organizer. It shows each step from a fresh clone to the audit of a closed ceremony.
-Contributors need only the [contributor instructions](../cli/README.md).
+Contributors need only the instructions in their ceremony folder, for example
+[zkLogin v2](../ceremonies/zklogin-v2/README.md).
 
 Related documents:
 
@@ -173,10 +174,16 @@ node coordinator/src/attestor.js --run "$RUN" --network "$NETWORK" --port 8090
 node coordinator/src/admin.js funding-url --run "$RUN" --network "$NETWORK"
 ```
 
-Commit the ceremony ID and network to `ceremony.json`, so that contributors run
-only `./ceremony contribute`. The CLI asks them for the funding URL (hidden).
+Add a folder `ceremonies/<name>/` for the ceremony and commit it. It needs two files:
+
+- `ceremony.json` with the title, the network, and the ceremony object ID.
+- `README.md` with the instructions for the contributors of this ceremony.
+
+Contributors then run `./ceremony contribute <name>`. The CLI asks them for the funding URL (hidden).
 Self-funded contributors press Enter there, then send the printed address to
-the organizer for `enroll-without-funding`. For a rehearsal without `ceremony.json`:
+the organizer for `enroll-without-funding`. The attestor shows the title from
+`ceremony.json` on the status page. It reads the title at startup, so restart the attestor
+after you add the folder. For a rehearsal without a ceremony folder:
 
 ```sh
 ./ceremony contribute --ceremony <ceremony-object-id> --network "$NETWORK"

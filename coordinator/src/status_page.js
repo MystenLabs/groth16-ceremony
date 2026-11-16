@@ -31,6 +31,8 @@ function render() {
     ? latest ? `Showing the last response, received ${duration(Date.now() - receivedAt)} ago. Ceremony data may be outdated.` : 'No ceremony data has been received yet. Retrying automatically.'
     : state ? `Current activity started ${duration(now - state.activityAt)} ago${unhealthy ? ' · ceremony data may be outdated' : ''}.` : '');
   if (!latest) return;
+  // The title comes from the ceremony file in the repository. The page keeps its default without one.
+  if (latest.title) text('ceremony-title', latest.title);
   text('network', latest.network);
   text('ceremony-id', latest.ceremonyId);
   text('uptime', unavailable ? '—' : duration(now - state.startedAt));

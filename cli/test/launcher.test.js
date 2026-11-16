@@ -5,7 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { resolveWorkdir, startRunLog, recordRunLog, readCeremonyConfig, redact } from '../src/run-context.js';
+import { resolveWorkdir, startRunLog, recordRunLog, readCeremonyConfig, findCeremonyById, listCeremonies, redact } from '../src/run-context.js';
 
 const repo = fileURLToPath(new URL('../../', import.meta.url));
 const ceremony = '0x' + 'a'.repeat(64);
@@ -100,22 +100,52 @@ test('default workspaces separate ceremonies and networks; explicit paths retain
   assert.equal(resolveWorkdir(options, null, repo), path.join(repo, 'ceremony-work/testnet/default'));
 });
 
-test('ceremony.json names the default ceremony and rejects malformed files', (t) => {
+test('a ceremony folder names a ceremony and rejects malformed files', (t) => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'ceremony-config-'));
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
   assert.equal(readCeremonyConfig(root), null);
-  const file = path.join(root, 'ceremony.json');
-  fs.writeFileSync(file, JSON.stringify({ ceremonyId: ceremony.toUpperCase().replace('0X', '0x'), network: 'testnet', title: ' zkLogin ' }));
-  assert.deepEqual(readCeremonyConfig(root), { ceremonyId: ceremony, network: 'testnet', title: 'zkLogin' });
+  assert.throws(() => readCeremonyConfig(root, 'alpha'), /unknown ceremony "alpha"/);
+  const add = (name, text) => {
+    fs.mkdirSync(path.join(root, 'ceremonies', name), { recursive: true });
+    fs.writeFileSync(path.join(root, 'ceremonies', name, 'ceremony.json'), text);
+  };
+  add('alpha', JSON.stringify({ ceremonyId: ceremony.toUpperCase().replace('0X', '0x'), network: 'testnet', title: ' zkLogin ' }));
+  const alpha = { name: 'alpha', ceremonyId: ceremony, network: 'testnet', title: 'zkLogin' };
+  // One ceremony needs no name.
+  assert.deepEqual(readCeremonyConfig(root), alpha);
+  assert.deepEqual(readCeremonyConfig(root, 'alpha'), alpha);
   for (const bad of ['{', '{"ceremonyId":"0x1","network":"testnet"}', JSON.stringify({ ceremonyId: ceremony, network: 'devnet' })]) {
-    fs.writeFileSync(file, bad);
+    add('alpha', bad);
     assert.throws(() => readCeremonyConfig(root), /ceremony\.json/);
   }
 });
 
-test('the repository ceremony.json is valid', () => {
-  const config = readCeremonyConfig(repo);
-  assert.ok(config, 'ceremony.json is missing');
+test('more than one ceremony needs a name', (t) => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'ceremony-config-'));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  for (const [name, id] of [['beta', '0x' + 'b'.repeat(64)], ['alpha', ceremony]]) {
+    fs.mkdirSync(path.join(root, 'ceremonies', name), { recursive: true });
+    fs.writeFileSync(path.join(root, 'ceremonies', name, 'ceremony.json'), JSON.stringify({ ceremonyId: id, network: 'mainnet' }));
+  }
+  // A folder without a ceremony file and a folder with a bad name are not ceremonies.
+  fs.mkdirSync(path.join(root, 'ceremonies', 'empty'));
+  fs.mkdirSync(path.join(root, 'ceremonies', '..bad'), { recursive: true });
+  assert.deepEqual(listCeremonies(root), ['alpha', 'beta']);
+  assert.throws(() => readCeremonyConfig(root), /more than one ceremony.*Available: alpha, beta/);
+  assert.equal(readCeremonyConfig(root, 'beta').ceremonyId, '0x' + 'b'.repeat(64));
+  assert.throws(() => readCeremonyConfig(root, '../x'), /unknown ceremony/);
+  // An object ID finds its folder, also with more than one ceremony.
+  assert.deepEqual(findCeremonyById(root, '0X' + 'B'.repeat(64)), { name: 'beta', ceremonyId: '0x' + 'b'.repeat(64), network: 'mainnet', title: null });
+  assert.equal(findCeremonyById(root, '0x' + 'c'.repeat(64)), null);
+});
+
+test('each ceremony in the repository has a valid file and instructions', () => {
+  const names = listCeremonies(repo);
+  assert.ok(names.includes('zklogin-v2'));
+  for (const name of names) {
+    assert.ok(readCeremonyConfig(repo, name));
+    assert.ok(fs.existsSync(path.join(repo, 'ceremonies', name, 'README.md')), `${name} has no README.md`);
+  }
 });
 
 test('progress logs append with UTC dates and redact the private funding URL', (t) => {

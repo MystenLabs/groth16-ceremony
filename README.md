@@ -1,4 +1,4 @@
-# zklogin-v2-ceremony
+# groth16-ceremony
 
 A Groth16 phase-2 trusted-setup ceremony, orchestrated on Sui and stored on
 Walrus. Generic across circuits (zkLogin v2 is the first user); nothing here is
@@ -16,18 +16,17 @@ Phase 1 (powers of tau) is **inherited, not run here**: the ceremony adopts a
 phase-1 file (`pot_final.ptau`) and commits its hash on-chain as `phase1_digest`.
 [`coordinator/artifacts/README.md`](coordinator/artifacts/README.md) describes that file.
 
-## Contribute
+## Ceremonies
 
-To contribute, install Git and Node.js 22, 24, or 26. Then run:
+Each ceremony has a folder in `ceremonies/`. The folder holds the instructions for
+contributors and the file `ceremony.json`, which names the network and the ceremony object.
 
-```bash
-git clone https://github.com/MystenLabs/zklogin-v2-ceremony.git
-./zklogin-v2-ceremony/ceremony contribute
-```
+| Ceremony | Instructions |
+| --- | --- |
+| zkLogin v2 | [ceremonies/zklogin-v2](ceremonies/zklogin-v2/README.md) |
 
-The command asks for the organizer's funding link, your public name, and some
-random text. Then it does the rest. `ceremony.json` selects the ceremony.
-See the [contributor instructions](cli/README.md) for details and options.
+A contributor runs `./ceremony contribute <name>`, for example `./ceremony contribute zklogin-v2`.
+`./ceremony --help` lists the options.
 
 ## How it works
 
@@ -47,9 +46,10 @@ See the [contributor instructions](cli/README.md) for details and options.
 | Directory | Content |
 | --- | --- |
 | `move/` | The Sui Move module `groth16_phase2`: the shared `Ceremony` object, its phases, and the slot rules. |
-| `cli/` | The contributor CLI. See the [contributor instructions](cli/README.md). |
+| `cli/` | The contributor CLI. |
 | `coordinator/` | The organizer tools: ceremony creation, the genesis builder, the attestor, admin commands, and the auditor. |
 | `bench/` | Benchmarks of the contribution and verification steps. |
+| `ceremonies/` | One folder for each ceremony: contributor instructions and `ceremony.json`. |
 | `docs/` | Operator documents. |
 
 The snarkjs pipeline is a pinned `MystenLabs/snarkjs` git dependency (see the
@@ -59,7 +59,7 @@ The snarkjs pipeline is a pinned `MystenLabs/snarkjs` git dependency (see the
 
 | Document | Reader |
 | --- | --- |
-| [Contributor instructions](cli/README.md) | Contributors |
+| [zkLogin v2 instructions](ceremonies/zklogin-v2/README.md) | Contributors to the zkLogin v2 ceremony |
 | [Running a ceremony](docs/running-a-ceremony.md) | The organizer: each step from creation to audit, and the mock rehearsal |
 | [Automatic contributor funding](docs/funding.md) | The organizer: payouts, the payout history, and recovery |
 | [Status page and monitoring](docs/status-and-monitoring.md) | The organizer and integrators: the HTTP endpoints |

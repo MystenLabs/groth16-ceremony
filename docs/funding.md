@@ -16,7 +16,8 @@ payouts only during `Phase2Contribute`.
 Funding amounts are configured per network in `cli/src/funding-policy.js`. Testnet
 defaults to **0.06 SUI + 0.30 WAL** per new contributor; contributor balance
 checks require **0.04 SUI + 0.15 WAL**. The WAL payout covers two uploads at the
-measured cost, with enough left after the first to pass the retry balance check. These budgets target ~114.8 MiB compressed
+measured cost, with enough left after the first to pass the retry balance check. These defaults are sized for the zkLogin v2
+circuit; override them for another circuit. These budgets target ~114.8 MiB compressed
 zkLogin contributions stored for 53 epochs: the testnet rehearsal measured
 0.120434316 WAL per upload. Mainnet starts at
 **0.10 SUI + 6 WAL**, with **0.05 SUI + 3 WAL** minimum balances. A read-only
