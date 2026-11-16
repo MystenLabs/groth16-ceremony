@@ -40,11 +40,10 @@ export async function runVerifySteps({ headPath, subPath, baseZkey, ptau, workdi
   try {
     // Read the submission through the memory reader, as the contributor CLI does.
     // The disk reader returns zeros for a read past the end of a file.
-    let result = await snarkStep('load', () => ({ type: 'mem', data: new Uint8Array(fs.readFileSync(subPath)) }));
-    if (!result.ok) return result;
-    const submission = result.value;
+    // A read error is a local fault, not bad bytes. It throws, and the slot stays Pending.
+    const submission = await run('load', () => ({ type: 'mem', data: new Uint8Array(fs.readFileSync(subPath)) }));
 
-    result = await snarkStep('extends', () => checkExtendsHead(headPath, submission));
+    let result = await snarkStep('extends', () => checkExtendsHead(headPath, submission));
     if (!result.ok) return result;
 
     // Check the transcript before the slow steps.

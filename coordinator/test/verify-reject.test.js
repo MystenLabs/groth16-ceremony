@@ -235,10 +235,9 @@ test('runVerifySteps rejects malformed inputs and filesystem errors', { timeout:
     assert.match(result.reason, /verifyFromInit/);
   });
 
-  await t.test('a missing local file rejects', async () => {
-    const result = await runVerifySteps({ ...args, subPath: path.join(tmp, 'does-not-exist.p2c') });
-    assert.equal(result.ok, false);
-    assert.match(result.reason, /ENOENT/);
+  // A read error of the submission is not a verdict. It throws, and the slot stays Pending.
+  await t.test('a missing submission file throws', async () => {
+    await assert.rejects(runVerifySteps({ ...args, subPath: path.join(tmp, 'does-not-exist.p2c') }), /ENOENT/);
   });
 });
 
