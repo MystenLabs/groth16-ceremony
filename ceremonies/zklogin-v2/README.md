@@ -28,7 +28,7 @@ Then the CLI shows a summary and asks you to confirm. After that you can walk aw
 The run looks like this:
 
 ```text
-  ✓ Prepare              received 0.10 SUI, 6 WAL from the organizer
+  ✓ Prepare              received 0.10 SUI, 6.00 WAL from the organizer
   ✓ Wait for your turn   waited 12m 04s
   ✓ Download             122.5 MB in 10s
   ⠸ Compute              ██████████░░░░░░░░░░  52%  1m 38s
