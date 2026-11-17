@@ -53,8 +53,6 @@ The instructions of each ceremony give the details.
 - **The organizer selects the contributors** while a ceremony uses an allowlist. A ceremony
   can also be open to any person, and the organizer can change this during the contributions.
 
-[Verify a ceremony](docs/verify-a-ceremony.md) shows how to check the record yourself.
-
 ## Terms
 
 | Term | Meaning |
@@ -89,7 +87,6 @@ the MystenLabs fork, at a fixed commit.
 | Document | Reader |
 | --- | --- |
 | [zkLogin v2 instructions](ceremonies/zklogin-v2/README.md) | Contributors to the zkLogin v2 ceremony |
-| [Verify a ceremony](docs/verify-a-ceremony.md) | Auditors |
 | [Cryptographic audit map](coordinator/src/crypto/README.md) | Reviewers of the cryptographic code |
 | [Running a ceremony](docs/running-a-ceremony.md) | Organizers |
 | [Automatic contributor funding](docs/funding.md) | Organizers |
