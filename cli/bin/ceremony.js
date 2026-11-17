@@ -424,7 +424,7 @@ async function cmdContribute(ceremonyId, opts) {
     if (asked && !opts.yes) {
       ui.print('');
       ui.card('Ready to contribute', [
-        ['Name', `${name} (public)`],
+        ['Name', `${name} · public`],
         ['Funding', fundingUrl ? 'the organizer pays' : unspentFunding ? 'the organizer paid earlier' : 'you fund the contribution address'],
         ['Time', 'about 5–10 minutes of work when your turn starts,\nthen about 3 minutes of checks'],
       ], ['Keep this terminal open and your laptop lid up.']);
