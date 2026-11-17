@@ -54,7 +54,7 @@ export async function ensureFunding(client, context, {
 
 // Bind funding to this key, ceremony, network, and organizer. An old workdir
 // without a receipt is not evidence of funding, even in a permissioned ceremony.
-function matchingFundingReceipt(receipt, { network, ceremonyId, address, organizer }) {
+export function matchingFundingReceipt(receipt, { network, ceremonyId, address, organizer }) {
   if (!receipt || receipt.version !== 1 || receipt.network !== network || !FUNDING_DIGEST.test(receipt.digest || '')) return null;
   for (const [key, expected] of Object.entries({ ceremonyId, address, organizer })) {
     if (!expected || typeof receipt[key] !== 'string' || normalizeSuiAddress(receipt[key]) !== normalizeSuiAddress(expected)) return null;

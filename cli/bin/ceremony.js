@@ -36,11 +36,11 @@ import path from 'node:path';
 import os from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { SuiGrpcClient } from '@mysten/sui/grpc';
-import { isValidSuiAddress, normalizeSuiAddress } from '@mysten/sui/utils';
+import { normalizeSuiAddress } from '@mysten/sui/utils';
 import { randomEntropy, exportSecretKey, generateKey, restoreKey, contribute, compress, decompress } from '../src/crypto.js';
 import { fetchBlob, uploadToWalrus, resolveSharedBlobContent } from '../src/walrus.js';
 import { reportQueueActivity } from '../src/queue-activity.js';
-import { ensureFunding, selectFundingMode, validatePublicCoordinatorUrl, requireFundingLinkForCeremony } from '../src/funding.js';
+import { ensureFunding, matchingFundingReceipt, selectFundingMode, validatePublicCoordinatorUrl, requireFundingLinkForCeremony } from '../src/funding.js';
 import { readHead, submitContribution, awaitVerdict, sweepFunds, claimWhenOpen, parsePollInterval } from '../src/chain.js';
 import { fundingDefaults } from '../src/funding-policy.js';
 import { requireAttestorHealthy } from '../src/health.js';
@@ -49,6 +49,7 @@ import { createUi, formatDuration, visibleText } from '../src/ui.js';
 import { askLine, askHidden, askYesNo } from '../src/prompt.js';
 import { displayName, nameBytes, MAX_NAME_BYTES } from '../src/display-name.js';
 import { hexToBase64 } from '../src/hash-forms.js';
+import { parseWithdrawTarget, checkWithdraw } from '../src/withdraw.js';
 import { explainFailure, errorMessage, assertTurnOpen, UPLOAD_MARGIN_MS } from '../src/failures.js';
 import { renderResultCard } from '../src/result-card.js';
 
@@ -84,7 +85,8 @@ const HELP = `ceremony v${VERSION} — contribute to a trusted-setup ceremony
 
 Usage:
   ceremony contribute [name] [options]   contribute to the named ceremony
-  ceremony refund [name] [options]       send the key's leftover funds back
+  ceremony withdraw [name] <address>     send all funds of your contribution address to
+                                         <address>, when you funded it yourself
 
 The name is a folder in ceremonies/, for example zklogin-v2. You can omit the
 name when the repository has one ceremony.
@@ -113,7 +115,6 @@ Advanced options (scripts and rehearsals):
   --coordinator-url <url>
                       override the coordinator URL from the ceremony (local rehearsals)
   --poll-interval <s> seconds between slot and balance checks (default: 30)
-  --to <addr>         refund: send funds here instead of to the organizer
 
 The CLI asks questions only on an interactive terminal. In a script, use --name,
 --entropy, and --funding-url or --self-funded. NO_COLOR=1 gives plain text.
@@ -351,9 +352,14 @@ async function cmdContribute(ceremonyId, opts) {
   try {
     // 1. Read the ceremony. Stop early if it cannot take a contribution.
     const head = await readHead(suiClient, ceremonyId);
-    if (head.closed) throw new Error('ceremony is closed');
-    if (head.finalized) throw new Error('ceremony is finalized; no further contributions');
-    if (!head.started) throw new Error('phase 2 has not started yet (organizer must finish phase 1 + start)');
+    // The chain is the record of accepted work. Do not contribute twice with one key.
+    const mineIndex = st.secretKey ? head.contributors.indexOf(normalizeSuiAddress(addr)) : -1;
+    // A key that contributed already gets its result, also after the end of the contributions.
+    if (mineIndex < 0) {
+      if (head.closed) throw new Error('ceremony is closed');
+      if (head.finalized) throw new Error('ceremony is finalized; no further contributions');
+      if (!head.started) throw new Error('phase 2 has not started yet (organizer must finish phase 1 + start)');
+    }
     coordinatorBase = opts['coordinator-url'] || head.coordinatorUrl;
     validatePublicCoordinatorUrl(coordinatorBase);
 
@@ -362,13 +368,25 @@ async function cmdContribute(ceremonyId, opts) {
     ui.print(`  ${ui.paint('dim', `${network} · ${plural(head.chainLen, 'contribution')} so far · ${head.permissionless ? 'open to everyone' : 'invite-only'}`)}`);
     ui.print('');
     session.statusUrl = coordinatorBase ? new URL('/status', coordinatorBase).href : null;
-    // The chain is the record of accepted work. Do not contribute twice with one key.
-    const mineIndex = st.secretKey ? head.contributors.indexOf(normalizeSuiAddress(addr)) : -1;
     if (mineIndex >= 0) {
       const entry = head.chain[mineIndex];
       const headline = `This key already contributed as #${mineIndex + 1}. Thank you, ${entry.name || 'contributor'}!`;
+      // An earlier run can stop before it returns the organizer funds. Return them now.
+      // The receipt must be for this network, ceremony, address, and on-chain organizer.
+      let funds = null;
+      const payout = matchingFundingReceipt(st.funding, { network, ceremonyId, address: addr, organizer: head.organizer });
+      if (payout && !payout.refundDigest) {
+        const refund = await returnLeftovers(ui, suiClient, keypair, net, payout, addr);
+        if (refund.digest) {
+          st = { ...st, funding: { ...payout, refundDigest: refund.digest } };
+          // A failure to save must not hide the result of the contribution.
+          try { saveState(workdir, st); } catch (e) { ui.detail(`state not saved after the refund: ${errorMessage(e)}`); }
+        }
+        funds = fundsMessage(refund, addr);
+      }
       if (!entry.contributionHash) {
         ui.print(`  ${ui.paint(['green', 'bold'], `✓ ${headline}`)}`);
+        printFunds(ui, funds);
       } else {
         const receipt = findReceipt(workdir, entry.contributionHash);
         // The chain holds the SharedBlob object id. Look up the Walrus blob id if the receipt has none.
@@ -380,6 +398,7 @@ async function cmdContribute(ceremonyId, opts) {
             hashHex: entry.contributionHash, position: mineIndex + 1, name: entry.name, tsMs: entry.tsMs,
             network, title: opts.title || DEFAULT_TITLE, statusUrl: session.statusUrl,
           },
+          funds,
           network, submitDigest: receipt?.submitDigest, walrusId, receiptPath: receipt?.path,
         });
       }
@@ -671,6 +690,15 @@ async function returnLeftovers(ui, suiClient, keypair, net, funding, addr) {
   }
 }
 
+// Print the funds outcome, if there is one.
+function printFunds(ui, funds) {
+  if (!funds) return;
+  ui.print('');
+  const [first, ...rest] = funds.lines;
+  ui.print(`  ${ui.paint(funds.color, funds.mark)} ${first}`);
+  for (const line of rest) ui.print(`    ${line}`);
+}
+
 // Explain the funds outcome in one short block: a mark, a color, and lines.
 function fundsMessage(refund, addr) {
   switch (refund.kind) {
@@ -683,14 +711,14 @@ function fundsMessage(refund, addr) {
     case 'failed':
       return {
         mark: '!', color: 'yellow',
-        lines: ['Leftover funds did not go back to the organizer.', 'To try again, run the same command, but with refund instead of contribute.'],
+        lines: ['Leftover funds did not go back to the organizer.', 'To try again, run the same command again.'],
       };
     default:
       return {
         mark: '·', color: 'dim',
         lines: [
           'Your leftover funds stay at your contribution address:', addr,
-          'To move them, run the same command, but with', 'refund --to <address> instead of contribute.',
+          'To move them, run the same command, but with withdraw', 'instead of contribute, and your address at the end.',
         ],
       };
   }
@@ -722,12 +750,7 @@ function printResult(ui, { headline, card, funds, network, submitDigest, walrusI
   ui.print('');
   ui.print('  Share this on your socials!');
 
-  if (funds) {
-    ui.print('');
-    const [first, ...rest] = funds.lines;
-    ui.print(`  ${p(funds.color, funds.mark)} ${first}`);
-    for (const line of rest) ui.print(`    ${line}`);
-  }
+  printFunds(ui, funds);
 
   const ids = [
     submitDigest ? ['Submitted on Sui', submitDigest, EXPLORER_NETWORKS.has(network) && `https://devxplorer.io/?search=${submitDigest}&network=${network}`] : null,
@@ -772,34 +795,33 @@ function printFailure(ui, title, lines, color = 'red', mark = '✗') {
   ui.print('');
 }
 
-// The key's saved ceremony and network win over the ceremony file. Explicit
-// --ceremony and --network flags win over both.
-async function cmdRefund(ceremonyId, opts) {
+// Send the full balance of the contribution address to an address of the contributor.
+// Organizer funds do not go this way. The CLI returns them to the organizer.
+async function cmdWithdraw(ceremonyId, target, opts) {
   const ui = createUi({ verbose: true, live: false });
+  const network = opts.network;
+  const net = NETWORKS[network];
   const st = loadState(opts.workdir);
   if (!st?.secretKey) throw new Error(`no contribution key found in ${statePath(opts.workdir)}`);
-  const network = (opts.explicit.network && opts.network) || st.network || opts.network;
-  const net = NETWORKS[network];
-  if (!net) throw new Error(`unknown network "${network}"`);
   const keypair = restoreKey(st.secretKey);
   const addr = keypair.toSuiAddress();
   const suiClient = makeSuiClient(net, network);
-  const target = (opts.explicit.ceremony && ceremonyId) || st.ceremonyId || ceremonyId || null;
-  ui.detail(`refund on ${network} for ceremony ${target || 'none'}`);
-  let refundAddr = opts.to || null;
-  // normalizeSuiAddress adds zeros to a short address. Refuse a short address instead.
-  if (refundAddr && !isValidSuiAddress(refundAddr)) throw new Error('--to must be a full Sui address: 0x and 64 hex digits');
-  if (!refundAddr) {
-    if (!target) throw new Error('missing refund target: pass --to <addr> or provide a ceremony id');
-    const head = await readHead(suiClient, target);
-    if (!head.organizer) throw new Error(`ceremony ${target} has no organizer refund address`);
-    refundAddr = head.organizer;
+  // The refusal rules are in src/withdraw.js.
+  const dest = checkWithdraw(st, target, addr, ceremonyId);
+  const bal = await readBalances(suiClient, addr, net);
+  ui.note(`From:   ${addr}`);
+  ui.note(`To:     ${dest}`);
+  ui.note(`Amount: all funds, about ${fmtCoin(bal.sui)} SUI and ${fmtCoin(bal.wal)} WAL`);
+  if (!opts.yes) {
+    if (!process.stdin.isTTY || !process.stdout.isTTY) throw new Error('withdraw needs a confirmation; add --yes in a script');
+    // A transfer cannot be undone. Only the full word confirms it.
+    if ((await askLine('  Type yes to send: ')).toLowerCase() !== 'yes') {
+      ui.note('Nothing sent.');
+      return;
+    }
   }
-  refundAddr = normalizeSuiAddress(refundAddr);
-  ui.note(`Sending leftover funds from ${addr} to ${refundAddr}…`);
-  const sw = await sweepFunds(suiClient, keypair, net.walCoinType, refundAddr);
-  if (sw.digest && st.funding) saveState(opts.workdir, { ...st, funding: { ...st.funding, refundDigest: sw.digest } });
-  if (sw.digest) ui.note(`✓ Leftover funds sent (${sw.digest}).`, 'success');
+  const sw = await sweepFunds(suiClient, keypair, net.walCoinType, dest);
+  if (sw.digest) ui.note(`✓ Funds sent (${sw.digest}).`, 'success');
   else ui.note(`Nothing sent: ${sw.skipped}.`);
 }
 
@@ -824,7 +846,6 @@ try {
       yes: { type: 'boolean', default: false },
       verbose: { type: 'boolean', default: false },
       'poll-interval': { type: 'string' },
-      to: { type: 'string' },
       network: { type: 'string' },
       workdir: { type: 'string' },
       help: { type: 'boolean', default: false },
@@ -834,23 +855,28 @@ try {
   fail(`${e.message}\n\n${HELP}`);
 }
 const { values: opts, positionals } = parsed;
-const [command, ceremonyName, ...extra] = positionals;
+const [command, ...args] = positionals;
 if (opts.help || !command) {
   console.log(HELP);
   process.exit(opts.help ? 0 : 1);
 }
-if (!['contribute', 'refund'].includes(command)) fail(`unknown command "${command}"\n\n${HELP}`);
+if (!['contribute', 'withdraw'].includes(command)) fail(`unknown command "${command}"\n\n${HELP}`);
+// The last argument of withdraw is the target address.
+const withdrawTo = command === 'withdraw' ? args.pop() : null;
+if (command === 'withdraw') {
+  // Refuse a bad address before all other work.
+  try { parseWithdrawTarget(withdrawTo); } catch (e) { fail(e.message); }
+}
+const [ceremonyName, ...extra] = args;
 if (extra.length) fail(`unexpected argument "${extra[0]}"`);
 if (ceremonyName && opts.ceremony) fail('Give a ceremony name or --ceremony <id>, not both.');
 
-opts.explicit = { ceremony: !!opts.ceremony, network: !!opts.network };
 let config = null;
 try {
   // An object ID can still match a ceremony folder. The folder then gives the network and the title.
   config = opts.ceremony ? findCeremonyById(REPO_ROOT, opts.ceremony) : readCeremonyConfig(REPO_ROOT, ceremonyName);
 } catch (e) {
-  // A refund with --workdir takes the ceremony from the saved state.
-  if (!(command === 'refund' && opts.workdir && !ceremonyName)) fail(e.message);
+  fail(e.message);
 }
 const ceremonyId = (opts.ceremony || config?.ceremonyId || '').toLowerCase() || null;
 if (ceremonyId && !CEREMONY_ID.test(ceremonyId)) fail('The ceremony ID must be 0x followed by 64 hexadecimal characters.');
@@ -881,11 +907,11 @@ process.on('SIGINT', () => {
   process.exit(130);
 });
 
+if (!ceremonyId) fail('No ceremony selected. Give a ceremony name from ceremonies/, or pass --ceremony <id>.');
 let run;
-if (command === 'refund') {
-  run = cmdRefund(ceremonyId, opts);
+if (command === 'withdraw') {
+  run = cmdWithdraw(ceremonyId, withdrawTo, opts);
 } else {
-  if (!ceremonyId) fail('No ceremony selected. Give a ceremony name from ceremonies/, or pass --ceremony <id>.');
   try {
     opts.fundingMode = selectFundingMode(opts);
     opts.pollMs = parsePollInterval(opts['poll-interval']);
