@@ -125,14 +125,10 @@ The funding link is a shared credential. Do not publish it. The CLI never stores
 prints it, and removes it from the log. Automatic funding is once for each address.
 
 After acceptance, the CLI returns leftover funds to the organizer only when the
-organizer funded the address. A self-funded address keeps its leftover funds.
-This command sends them to an address of your choice:
+organizer funded the address. If that return fails, run the same command again.
 
-```sh
-./ceremony refund zklogin-v2 --to <your Sui address>
-```
-
-Without `--to`, the command sends the funds to the organizer.
+A self-funded address keeps its leftover funds. The CLI has no command to move them.
+The key of the address is in `state.json`, and a Sui wallet can import it.
 
 ## Your files
 
