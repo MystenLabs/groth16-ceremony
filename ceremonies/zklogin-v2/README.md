@@ -11,9 +11,10 @@ The [status page](https://zkceremony.sui.io/status) shows the ceremony state and
 ## Before you start
 
 - The ceremony has two periods. In the invited period, you need an invitation from the
-  organizer, because the ceremony uses an allowlist. In the open period, any person can
-  contribute. **The ceremony is now in the invited period.** This page will say when the
-  open period starts.
+  organizer, because the ceremony uses an allowlist. The organizer pays your fees through
+  the funding link. In the open period, any person can contribute, and you pay the fees
+  yourself: you need about 0.05 SUI and 3 WAL. **The ceremony is now in the invited
+  period.** This page will say when the open period starts.
 - You need Git and Node.js 22, 24, or 26. With nvm: `nvm install 24 && nvm use 24`.
 - You need a machine that can stay on for your turn. Keep the terminal open and the laptop lid up.
 - Your turn takes 7 to 10 minutes. If other contributors are before you, you wait first.
@@ -28,7 +29,7 @@ git clone https://github.com/MystenLabs/groth16-ceremony.git
 The command asks these questions:
 
 1. **The funding link** from the organizer. The input is hidden. Keep the link private.
-   Press Enter if you fund the contribution address yourself.
+   Press Enter if you fund the contribution address yourself, as in the open period.
 2. **Your name and your organization.** They go on-chain and into the final ceremony
    transcript as "Name (Organization)". Press Enter for no organization.
 3. **Some random text.** The input is hidden. The CLI also mixes in randomness
@@ -117,14 +118,21 @@ The CLI checks the balance of the contribution address first:
 - Not enough funds, with a funding link: it asks the server of the organizer to
   enroll and fund the address.
 - Not enough funds, without a funding link: it shows the address and waits for
-  you to fund it. Ask the organizer to add your address to the allowlist.
+  you to fund it. Send at least 0.05 SUI and 3 WAL to that address. In the invited
+  period, also ask the organizer to add the address to the allowlist.
 
 The funding link is a shared credential. Do not publish it. The CLI never stores or
 prints it, and removes it from the log. Automatic funding is once for each address.
 
 After acceptance, the CLI returns leftover funds to the organizer only when the
-organizer funded the address. A self-funded address keeps its leftover funds;
-`./ceremony refund zklogin-v2` sends them back on request.
+organizer funded the address. A self-funded address keeps its leftover funds.
+This command sends them to an address of your choice:
+
+```sh
+./ceremony refund zklogin-v2 --to <your Sui address>
+```
+
+Without `--to`, the command sends the funds to the organizer.
 
 ## Your files
 
