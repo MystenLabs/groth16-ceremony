@@ -1,4 +1,4 @@
-import { Transaction, coinWithBalance } from '@mysten/sui/transactions';
+import { Transaction } from '@mysten/sui/transactions';
 import { net } from './config.js';
 import { readCeremony } from './chain.js';
 import { fundingSecretMatches } from '../crypto/funding_secret.js';
@@ -21,7 +21,7 @@ export async function buildFundingTransaction({ client, owner, network, packageI
     const { balance } = await client.core.getBalance({ owner, coinType });
     if (BigInt(balance.balance) < wal) throw new FundingError(503, 'organizer has insufficient WAL; contact the organizer');
     // The SDK selects the sources when it builds the transaction.
-    tx.transferObjects([coinWithBalance({ type: coinType, balance: wal })], tx.pure.address(address));
+    tx.transferObjects([tx.coin({ type: coinType, balance: wal })], tx.pure.address(address));
   }
   return tx;
 }
