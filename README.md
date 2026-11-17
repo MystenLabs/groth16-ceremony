@@ -89,8 +89,6 @@ the MystenLabs fork, at a fixed commit.
 | [zkLogin v2 instructions](ceremonies/zklogin-v2/README.md) | Contributors to the zkLogin v2 ceremony |
 | [Cryptographic audit map](coordinator/src/crypto/README.md) | Reviewers of the cryptographic code |
 | [Running a ceremony](docs/running-a-ceremony.md) | Organizers |
-| [Automatic contributor funding](docs/funding.md) | Organizers |
-| [Status page and monitoring](docs/status-and-monitoring.md) | Organizers and integrators |
 
 ## Tests
 
