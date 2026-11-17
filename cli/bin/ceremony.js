@@ -36,7 +36,7 @@ import path from 'node:path';
 import os from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { SuiGrpcClient } from '@mysten/sui/grpc';
-import { isValidSuiAddress, normalizeSuiAddress } from '@mysten/sui/utils';
+import { normalizeSuiAddress } from '@mysten/sui/utils';
 import { randomEntropy, exportSecretKey, generateKey, restoreKey, contribute, compress, decompress } from '../src/crypto.js';
 import { fetchBlob, uploadToWalrus, resolveSharedBlobContent } from '../src/walrus.js';
 import { reportQueueActivity } from '../src/queue-activity.js';
@@ -49,6 +49,7 @@ import { createUi, formatDuration, visibleText } from '../src/ui.js';
 import { askLine, askHidden, askYesNo } from '../src/prompt.js';
 import { displayName, nameBytes, MAX_NAME_BYTES } from '../src/display-name.js';
 import { hexToBase64 } from '../src/hash-forms.js';
+import { parseWithdrawTarget, checkWithdraw } from '../src/withdraw.js';
 import { explainFailure, errorMessage, assertTurnOpen, UPLOAD_MARGIN_MS } from '../src/failures.js';
 import { renderResultCard } from '../src/result-card.js';
 
@@ -796,7 +797,7 @@ function printFailure(ui, title, lines, color = 'red', mark = '✗') {
 
 // Send the full balance of the contribution address to an address of the contributor.
 // Organizer funds do not go this way. The CLI returns them to the organizer.
-async function cmdWithdraw(ceremonyId, dest, opts) {
+async function cmdWithdraw(ceremonyId, target, opts) {
   const ui = createUi({ verbose: true, live: false });
   const network = opts.network;
   const net = NETWORKS[network];
@@ -805,13 +806,8 @@ async function cmdWithdraw(ceremonyId, dest, opts) {
   const keypair = restoreKey(st.secretKey);
   const addr = keypair.toSuiAddress();
   const suiClient = makeSuiClient(net, network);
-  // Each open payout receipt stops the command, also one that does not match this ceremony.
-  if (st.funding && !st.funding.refundDigest) {
-    throw new Error('the organizer funded this address; its funds go back to the organizer, not to another address');
-  }
-  if ([addr, ceremonyId, '0x0'].some((bad) => normalizeSuiAddress(bad) === dest)) {
-    throw new Error('the target must be an address of yours; it cannot be the contribution address, the ceremony, or the zero address');
-  }
+  // The refusal rules are in src/withdraw.js.
+  const dest = checkWithdraw(st, target, addr, ceremonyId);
   const bal = await readBalances(suiClient, addr, net);
   ui.note(`From:   ${addr}`);
   ui.note(`To:     ${dest}`);
@@ -868,8 +864,8 @@ if (!['contribute', 'withdraw'].includes(command)) fail(`unknown command "${comm
 // The last argument of withdraw is the target address.
 const withdrawTo = command === 'withdraw' ? args.pop() : null;
 if (command === 'withdraw') {
-  // normalizeSuiAddress adds zeros to a short address. Refuse a short address instead.
-  if (!withdrawTo || !isValidSuiAddress(withdrawTo) || withdrawTo.length !== 66) fail('withdraw needs a full Sui address: 0x and 64 hex digits');
+  // Refuse a bad address before all other work.
+  try { parseWithdrawTarget(withdrawTo); } catch (e) { fail(e.message); }
 }
 const [ceremonyName, ...extra] = args;
 if (extra.length) fail(`unexpected argument "${extra[0]}"`);
@@ -914,7 +910,7 @@ process.on('SIGINT', () => {
 if (!ceremonyId) fail('No ceremony selected. Give a ceremony name from ceremonies/, or pass --ceremony <id>.');
 let run;
 if (command === 'withdraw') {
-  run = cmdWithdraw(ceremonyId, normalizeSuiAddress(withdrawTo), opts);
+  run = cmdWithdraw(ceremonyId, withdrawTo, opts);
 } else {
   try {
     opts.fundingMode = selectFundingMode(opts);
