@@ -10,7 +10,10 @@ The [status page](https://zkceremony.sui.io/status) shows the ceremony state and
 
 ## Before you start
 
-- You need an invitation from the organizer. The ceremony uses an allowlist.
+- The ceremony has two periods. In the invited period, you need an invitation from the
+  organizer, because the ceremony uses an allowlist. In the open period, any person can
+  contribute. **The ceremony is now in the invited period.** This page will say when the
+  open period starts.
 - You need Git and Node.js 22, 24, or 26. With nvm: `nvm install 24 && nvm use 24`.
 - You need a machine that can stay on for your turn. Keep the terminal open and the laptop lid up.
 - Your turn takes 7 to 10 minutes. If other contributors are before you, you wait first.
@@ -146,7 +149,7 @@ the key in `state.json` has no more use. Keep the receipt.
 | R1CS `b2sum` | `bc8cdc434586a667aca8f5ab7c11ee14ece87e231570c43845a1cb0a8d82b268ed5dff1388f642476ad6c94c2f1451419e0a93ea57b8eb187163702f14af142f` |
 | R1CS on Walrus | Blob id `kQP5kFOpd6GN48C5B2vBaZqWwyEaeIHrGc9Eb4x_Ods`. The `r1cs_blob_id` field of the ceremony object is the shared blob object `0xa30ba93ee67719f124f4b1b374e3123d4679ddc97121cb948928c131a9341991`. |
 | Network | Sui mainnet |
-| Access | Permissioned. The organizer adds each contributor to the allowlist. |
+| Access | Permissioned now: the organizer adds each contributor to the allowlist. The organizer will change it to permissionless for the open period. The `permissioned` field of the ceremony object shows the current mode. |
 | Turn length | 15 minutes |
 | Ceremony object | `0xed7a3922c4eb8c7efa4392b5918118ef73f865a362a54d1260c0cbbc83e6bb71`, also in [`ceremony.json`](ceremony.json) |
 | Move package | `0x59c61edc0603f301b0295a5d2a9ace510bd26df2c4ca64c8dc91aecc75d08a28` |

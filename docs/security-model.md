@@ -56,7 +56,7 @@ One key controls both roles. It holds the `OrganizerCap` object of the ceremony.
 | Can do | Protection |
 | --- | --- |
 | Refuse a valid submission, or stop the attestor | No cryptographic protection. This delays the ceremony. It does not make the result insecure. |
-| Select the contributors, in a ceremony with an allowlist | The allowlist and each contributor address are public on-chain. |
+| Select the contributors, while the ceremony uses an allowlist | The allowlist, the access mode, and each contributor address are public on-chain. A ceremony can also be open to any person. The organizer can change the mode during the contributions, and each change is an on-chain event. |
 | Accept an invalid submission | The contract trusts the `accept` of the organizer. The audit finds this fault: it verifies the complete chain from the public files. |
 | End the contributions at a time of its choice | The contract refuses the end while the chain is empty. |
 | Publish a new version of the Move package | The organizer key holds the upgrade right of the package. A new version can add functions. After the ceremony, the organizer can make the package immutable, which removes this right. |

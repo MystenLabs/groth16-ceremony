@@ -7,9 +7,14 @@ of the ceremony, and Walrus stores each file. The code works for any Groth16 cir
 
 | Ceremony | Network | State | Links |
 | --- | --- | --- | --- |
-| zkLogin v2 | Sui mainnet | Open for contributions | [Instructions](ceremonies/zklogin-v2/README.md) · [Status](https://zkceremony.sui.io/status) |
+| zkLogin v2 | Sui mainnet | Open for invited contributors | [Instructions](ceremonies/zklogin-v2/README.md) · [Status](https://zkceremony.sui.io/status) |
 
-To contribute, you need an invitation from the organizer. Then you run one command:
+The zkLogin v2 ceremony has two periods:
+
+1. **Invited period (now).** The organizer invites each contributor.
+2. **Open period (later).** Any person can contribute. The instructions will say when it starts.
+
+A contributor runs one command:
 
 ```sh
 git clone https://github.com/MystenLabs/groth16-ceremony.git
@@ -39,7 +44,8 @@ The instructions of each ceremony give the details.
   secret random value and does not keep it.
 - **The attestor can delay the ceremony, but it cannot forge it.** The on-chain record
   and the Walrus files let any person repeat each check of the attestor.
-- **The organizer selects the contributors** in a ceremony with an allowlist.
+- **The organizer selects the contributors** while a ceremony uses an allowlist. A ceremony
+  can also be open to any person, and the organizer can change this during the contributions.
 
 [The security model](docs/security-model.md) gives the full list.
 [Verify a ceremony](docs/verify-a-ceremony.md) shows how to check the record yourself.
