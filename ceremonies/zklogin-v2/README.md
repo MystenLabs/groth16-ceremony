@@ -16,11 +16,12 @@ git clone https://github.com/MystenLabs/groth16-ceremony.git
 ./groth16-ceremony/ceremony contribute zklogin-v2
 ```
 
-The command asks three questions:
+The command asks these questions:
 
 1. **The funding link** from the organizer. The input is hidden. Keep the link private.
    Press Enter if you fund the contribution address yourself.
-2. **Your name.** It goes on-chain and into the final ceremony transcript.
+2. **Your name and your organization.** They go on-chain and into the final ceremony
+   transcript as "Name (Organization)". Press Enter for no organization.
 3. **Some random text.** The input is hidden. The CLI also mixes in randomness
    from your operating system.
 
