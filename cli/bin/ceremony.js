@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Contribute to a Groth16 phase-2 trusted-setup ceremony on Sui and Walrus.
 //
-// Why it exists: A contributor runs one command, answers three questions, and
+// Why it exists: A contributor runs one command, answers a few questions, and
 // walks away. The CLI does the rest and explains each step in plain words.
 //
 // How it works:
@@ -47,6 +47,8 @@ import { requireAttestorHealthy } from '../src/health.js';
 import { CEREMONY_ID, findCeremonyById, readCeremonyConfig, resolveWorkdir, startRunLog, recordRunLog, redact } from '../src/run-context.js';
 import { createUi, formatDuration, visibleText } from '../src/ui.js';
 import { askLine, askHidden, askYesNo } from '../src/prompt.js';
+import { displayName, nameBytes, MAX_NAME_BYTES } from '../src/display-name.js';
+import { hexToBase64 } from '../src/hash-forms.js';
 import { explainFailure, errorMessage, assertTurnOpen, UPLOAD_MARGIN_MS } from '../src/failures.js';
 import { renderResultCard } from '../src/result-card.js';
 
@@ -75,7 +77,6 @@ const NETWORKS = {
   },
 };
 const VERSION = '0.1.0';
-const MAX_NAME_BYTES = 64;
 const REPO_ROOT = fileURLToPath(new URL('../../', import.meta.url));
 const DEFAULT_TITLE = 'Trusted-setup ceremony';
 
@@ -90,11 +91,12 @@ name when the repository has one ceremony.
 
 The CLI reads the ceremony from Sui, waits for your turn, computes your
 contribution, uploads it to Walrus, and submits it on-chain. It asks for the
-funding link, your public name, and some random text. If a run stops, run the
+funding link, your public name and organization, and some random text. If a run stops, run the
 same command again: it uses the same key and starts again from the download.
 
 Options:
-  --name <s>          contribution name, public on-chain (asked if omitted)
+  --name <s>          contribution name, public on-chain (asked if omitted);
+                      the usual form is "Name (Organization)"
   --yes               start without the confirmation question
   --verbose           show technical details on screen (the log always has them)
   --help              show this text
@@ -127,7 +129,6 @@ function shortPath(file) {
 }
 function fmtCoin(mist) { return (Number(mist) / 1e9).toFixed(2); }
 function fmtMB(n) { return n < 1048576 ? `${Math.max(1, Math.round(n / 1024))} KB` : `${(n / 1048576).toFixed(1)} MB`; }
-function nameBytes(name) { return Buffer.byteLength(name, 'utf8'); }
 function clockTime(ms) { return new Date(ms).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }); }
 function plural(n, word) { return `${n} ${word}${n === 1 ? '' : 's'}`; }
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -304,11 +305,14 @@ async function askFundingLink(ui, head) {
 
 async function askName(ui) {
   ui.print('');
-  ui.note('Your name goes on-chain and into the final ceremony transcript.');
+  ui.note('Your name and organization go on-chain and into the final ceremony transcript.');
+  ui.note('They appear as "Name (Organization)". Press Enter for no organization.');
   for (;;) {
-    const name = await askLine('  Name: ');
+    const person = await askLine('  Name: ');
+    // With no name, the CLI makes an anonymous name. It then needs no organization.
+    const name = person.trim() ? displayName(person, await askLine('  Organization: ')) : '';
     if (nameBytes(name) <= MAX_NAME_BYTES) return name;
-    ui.note(`The name is too long. Use at most ${MAX_NAME_BYTES} bytes.`, 'error');
+    ui.note(`"${name}" is too long. Use at most ${MAX_NAME_BYTES} bytes for the name and the organization together.`, 'error');
   }
 }
 
@@ -421,7 +425,7 @@ async function cmdContribute(ceremonyId, opts) {
     if (asked && !opts.yes) {
       ui.print('');
       ui.card('Ready to contribute', [
-        ['Name', `${name} (public)`],
+        ['Name', `${name} · public`],
         ['Funding', fundingUrl ? 'the organizer pays' : unspentFunding ? 'the organizer paid earlier' : 'you fund the contribution address'],
         ['Time', 'about 5–10 minutes of work when your turn starts,\nthen about 3 minutes of checks'],
       ], ['Keep this terminal open and your laptop lid up.']);
@@ -535,6 +539,7 @@ async function cmdContribute(ceremonyId, opts) {
     const hashHex = c.out.hashHex;
     timings.contributesec = c.sec;
     ui.detail(`contribution hash: ${hashHex}`);
+    ui.detail(`contribution hash in base64: ${hexToBase64(hashHex)}`);
     ui.step('Pack');
     const cp = await timed(() => compress(c.out.bytes, snLog));
     const p2c = cp.out;
@@ -575,7 +580,7 @@ async function cmdContribute(ceremonyId, opts) {
     }
 
     const receiptPath = path.join(workdir, `receipt-${hashHex.slice(0, 8)}.json`);
-    fs.writeFileSync(receiptPath, JSON.stringify({ name, ceremonyId, contributionHash: hashHex, blobId, contentBlobId, address: addr, submitDigest: sd, verdict, funding: funding || null, refundDigest: refund?.digest || null, timings, finishedAt: new Date().toISOString() }, null, 2));
+    fs.writeFileSync(receiptPath, JSON.stringify({ name, ceremonyId, contributionHash: hashHex, contributionHashBase64: hexToBase64(hashHex), blobId, contentBlobId, address: addr, submitDigest: sd, verdict, funding: funding || null, refundDigest: refund?.digest || null, timings, finishedAt: new Date().toISOString() }, null, 2));
     ui.detail(`receipt saved: ${receiptPath}`);
     await postTelemetry(coordinatorBase, {
       cli: true, status: verdict, name, ceremony_id: ceremonyId, storage: 'walrus',
@@ -738,7 +743,7 @@ function printResult(ui, { headline, card, funds, network, submitDigest, walrusI
 
   if (receiptPath) {
     ui.print('');
-    ui.print(`  ${p('dim', 'Receipt (has the full hash):')} ${shortPath(receiptPath)}`);
+    ui.print(`  ${p('dim', 'Receipt (has the full hash, in hexadecimal and in base64):')} ${shortPath(receiptPath)}`);
   }
 }
 

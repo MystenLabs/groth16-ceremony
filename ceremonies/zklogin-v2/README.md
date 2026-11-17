@@ -16,11 +16,12 @@ git clone https://github.com/MystenLabs/groth16-ceremony.git
 ./groth16-ceremony/ceremony contribute zklogin-v2
 ```
 
-The command asks three questions:
+The command asks these questions:
 
 1. **The funding link** from the organizer. The input is hidden. Keep the link private.
    Press Enter if you fund the contribution address yourself.
-2. **Your name.** It goes on-chain and into the final ceremony transcript.
+2. **Your name and your organization.** They go on-chain and into the final ceremony
+   transcript as "Name (Organization)". Press Enter for no organization.
 3. **Some random text.** The input is hidden. The CLI also mixes in randomness
    from your operating system.
 
@@ -60,6 +61,22 @@ from idle sleep when it can. A laptop still needs an open lid.
 - The CLI shows your contribution hash and the path to your receipt.
 - Publish the hash, so that others can check that the final transcript includes it.
 - The [status page](https://zkceremony.sui.io/status) shows the accepted contributions.
+
+### Find your hash on-chain
+
+Your receipt file has the values for this check:
+
+- `contributionHash`: your contribution hash in hexadecimal. The ceremony record uses this form.
+- `contributionHashBase64`: the same 64 bytes in base64. A Sui explorer shows this form.
+- `submitDigest`: the transaction that submitted your contribution.
+
+To see the hash in a Sui explorer:
+
+1. Open the transaction `submitDigest` on Sui mainnet. The CLI prints a link to it.
+2. Open its events. The `ContributionSubmitted` event has the field `contribution_hash`.
+   It must be equal to `contributionHashBase64`.
+3. The ceremony object shows the same value. Each entry of its `chain` field has a
+   `contribution_hash`.
 
 ## If something goes wrong
 
