@@ -12,8 +12,8 @@ of the ceremony, and Walrus stores each file. The code works for any Groth16 cir
 The zkLogin v2 ceremony has two periods:
 
 1. **Invited period (now).** The organizer invites each contributor.
-2. **Open period (later).** Any person can contribute, and pays the fees of the contribution.
-   The instructions will say when it starts.
+2. **Open period (later).** Any person can contribute. The instructions will say when it
+   starts and how the fees are paid.
 
 A contributor runs one command:
 

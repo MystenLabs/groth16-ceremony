@@ -12,9 +12,9 @@ The [status page](https://zkceremony.sui.io/status) shows the ceremony state and
 
 - The ceremony has two periods. In the invited period, you need an invitation from the
   organizer, because the ceremony uses an allowlist. The organizer pays your fees through
-  the funding link. In the open period, any person can contribute, and you pay the fees
-  yourself: you need about 0.05 SUI and 3 WAL. **The ceremony is now in the invited
-  period.** This page will say when the open period starts.
+  the funding link. In the open period, any person can contribute. **The ceremony is now
+  in the invited period.** This page will say when the open period starts and how the
+  fees are paid.
 - You need Git and Node.js 22, 24, or 26. With nvm: `nvm install 24 && nvm use 24`.
 - You need a machine that can stay on for your turn. Keep the terminal open and the laptop lid up.
 - Your turn takes 7 to 10 minutes. If other contributors are before you, you wait first.
@@ -29,7 +29,7 @@ git clone https://github.com/MystenLabs/groth16-ceremony.git
 The command asks these questions:
 
 1. **The funding link** from the organizer. The input is hidden. Keep the link private.
-   Press Enter if you fund the contribution address yourself, as in the open period.
+   Press Enter if you fund the contribution address yourself.
 2. **Your name and your organization.** They go on-chain and into the final ceremony
    transcript as "Name (Organization)". Press Enter for no organization.
 3. **Some random text.** The input is hidden. The CLI also mixes in randomness
