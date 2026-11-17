@@ -7,8 +7,7 @@
 //   node src/genesis.js verify --r1cs zklogin-o2.r1cs [--ptau artifacts/pot_final.ptau] [--out artifacts]
 //   node src/genesis.js clean [--out artifacts] [--dry-run]
 //
-// coordinator/artifacts/README.md describes the phase-1 file (ptau).
-// Its BLAKE2b-512 / b2sum is the on-chain phase1_digest.
+// The BLAKE2b-512 / b2sum of the phase-1 file (ptau) is the on-chain phase1_digest.
 //
 // g16s is memory-heavy for large circuits, so the snarkjs child gets a bigger
 // V8 heap.

@@ -91,16 +91,18 @@ coordinator/scripts/install-walrus.sh
 
 ### 2. Adopt phase 1
 
-Copy the phase-1 file into `coordinator/artifacts/`.
-[`coordinator/artifacts/README.md`](../coordinator/artifacts/README.md) describes the file.
+Copy the phase-1 file into the run folder. The phase-1 file is the output of a
+powers-of-tau ceremony, prepared for phase 2. Its BLAKE2b-512 hash (`b2sum`) becomes
+the on-chain `phase1_digest`.
 
 ```sh
-cp <phase-1 file> coordinator/artifacts/pot_final.ptau
+mkdir -p "ceremony-runs/$RUN/artifacts"
+cp <phase-1 file> "ceremony-runs/$RUN/artifacts/pot_final.ptau"
 
 # Optional read-only input identity checks, useful before or during a run.
 walrus --context "$NETWORK" --json blob-id circuit.r1cs
-sha256sum circuit.r1cs coordinator/artifacts/pot_final.ptau
-b2sum circuit.r1cs coordinator/artifacts/pot_final.ptau
+sha256sum circuit.r1cs "ceremony-runs/$RUN/artifacts/pot_final.ptau"
+b2sum circuit.r1cs "ceremony-runs/$RUN/artifacts/pot_final.ptau"
 ```
 
 ### 3. Create the ceremony
@@ -110,7 +112,7 @@ b2sum circuit.r1cs coordinator/artifacts/pot_final.ptau
 
 ```sh
 node coordinator/src/create.js --run "$RUN" --network "$NETWORK" \
-  --r1cs circuit.r1cs --ptau coordinator/artifacts/pot_final.ptau \
+  --r1cs circuit.r1cs --ptau "ceremony-runs/$RUN/artifacts/pot_final.ptau" \
   --auditors 0xAUD1,0xAUD2 --threshold 2 --coordinator-url https://coordinator.example \
   --permissionless
 ```
@@ -141,9 +143,9 @@ Build the genesis (`g16s` + extract + compress) from the adopted ptau + r1cs.
 
 ```sh
 node coordinator/src/genesis.js --run "$RUN" --r1cs circuit.r1cs \
-  --ptau coordinator/artifacts/pot_final.ptau
+  --ptau "ceremony-runs/$RUN/artifacts/pot_final.ptau"
 node coordinator/src/genesis.js verify --run "$RUN" --r1cs circuit.r1cs \
-  --ptau coordinator/artifacts/pot_final.ptau
+  --ptau "ceremony-runs/$RUN/artifacts/pot_final.ptau"
 ```
 
 > **`genesis.js verify` is mandatory.** `start-phase2` does not check the genesis file,

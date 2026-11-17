@@ -19,16 +19,12 @@ cd coordinator && npm install && cd ..
 ```
 
 The full verify (`assemble` + `verifyFromInit`) needs the two big artifacts —
-the genesis full zkey and the phase-1 ptau. Drop them in `coordinator/artifacts/`
-(the default lookup) or point at them with `--base` / `--ptau`.
+the genesis full zkey and the phase-1 ptau. Give their paths with `--base` and `--ptau`.
 
 ## Run
 
 ```
-# Default ceremony + coordinator/artifacts, latest accepted contribution:
-node bench/verify-bench.mjs
-
-# Explicit artifacts / ceremony:
+# The latest accepted contribution of a ceremony:
 node bench/verify-bench.mjs --ceremony 0x… --base path/to/circuit_0000.zkey --ptau path/to/pot_final.ptau
 
 # Or two explicit SharedBlob object ids (head = predecessor, sub = contribution):
