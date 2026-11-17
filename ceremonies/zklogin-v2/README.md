@@ -169,3 +169,4 @@ the key in `state.json` has no more use. Keep the receipt.
 | Final beacon of phase 2 | Drawn on-chain from Sui randomness when the organizer ends the contributions |
 
 The [repository README](../../README.md) describes how the ceremony works and what it guarantees.
+[Verify a ceremony](../../docs/verify-a-ceremony.md) shows how to check the record.

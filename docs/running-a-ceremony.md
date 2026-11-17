@@ -176,6 +176,10 @@ node coordinator/src/audit.js --run "$RUN" --network "$NETWORK"
 The audit downloads the public files and checks the complete chain against the
 on-chain record. It prints `audit OK` when each check passes.
 
+The same command also works during the contributions. It then checks the accepted
+contributions up to now and prints `audit OK so far`.
+[Verify a ceremony](verify-a-ceremony.md) describes both cases for an external auditor.
+
 ### 9. Consider an immutable package
 
 The organizer key holds the `UpgradeCap` of the Move package. An immutable package

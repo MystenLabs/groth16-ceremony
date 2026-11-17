@@ -10,7 +10,7 @@ import { buildGenesis, readContributionInfo } from '../src/crypto/snarkjs.js';
 import { b2sumFile } from '../src/crypto/commitments.js';
 import { runVerifySteps, verifyBaseCircuit } from '../src/crypto/verify_contribution.js';
 import { runVerifyStepsIsolated } from '../src/lib/verify_contribution.js';
-import { verifyFinalArtifacts } from '../src/crypto/audit.js';
+import { auditClosedCeremony, auditInProgressCeremony } from '../src/crypto/audit.js';
 import { contribute, compress, decompress } from '../../cli/src/crypto.js';
 
 const BEACON = '00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff';
@@ -170,15 +170,61 @@ test('offline ceremony: genesis, CLI contribution, isolated verification, beacon
     ],
     workdir: tmp,
   };
+  // The ceremony before the seal: one accepted contribution and no beacon entry.
+  const openCeremony = {
+    phase: { '@variant': 'Phase2Contribute' },
+    head_blob_id: 'participant-blob',
+    phase1_digest: ceremony.phase1_digest,
+    chain: [ceremony.chain[0]],
+  };
+  const openArgs = {
+    ceremony: openCeremony, r1cs, localR1cs: r1cs, ptau, getBaseZkey: async () => baseZkey,
+    expectedR1csBlobId: 'r1cs-content', actualR1csBlobId: 'r1cs-content',
+    contributions: [{ sharedBlobId: 'participant-blob', file: headP2c }],
+    workdir: tmp,
+  };
+  await t.test('the audit of a ceremony in progress passes with one participant', async () => {
+    assert.deepEqual(await auditInProgressCeremony(openArgs), { contributionCount: 1 });
+    const frozen = { ...openCeremony, phase: { '@variant': 'Phase2Beacon' } };
+    assert.deepEqual(await auditInProgressCeremony({ ...openArgs, ceremony: frozen }), { contributionCount: 1 });
+  });
+  await t.test('the audit of a ceremony in progress rejects a wrong record', async () => {
+    const withChain = (chain, extra = {}) => ({ ...openArgs, ceremony: { ...openCeremony, chain, ...extra } });
+    const wrongHash = [{ ...ceremony.chain[0], contribution_hash: b64('00'.repeat(64)) }];
+    await assert.rejects(auditInProgressCeremony(withChain(wrongHash)), /does not match on-chain contribution_hash/);
+    await assert.rejects(auditInProgressCeremony(withChain([])), /ceremony has no accepted contribution/);
+    await assert.rejects(auditInProgressCeremony(withChain(openCeremony.chain, { head_blob_id: 'other-blob' })), /head_blob_id does not match/);
+    await assert.rejects(auditInProgressCeremony({ ...openArgs, ceremony }), /phase is Closed/);
+    await assert.rejects(auditInProgressCeremony({ ...openArgs, actualR1csBlobId: 'wrong-content' }), /r1cs Walrus blob id mismatch/);
+    // A head with a beacon entry belongs to a sealed ceremony.
+    const sealedHead = {
+      ...openArgs,
+      ceremony: { ...openCeremony, head_blob_id: 'final-blob', chain: ceremony.chain },
+      contributions: auditArgs.contributions,
+    };
+    await assert.rejects(auditInProgressCeremony(sealedHead), /head zkey has a beacon entry/);
+    // A zkey that is not the genesis does not verify the head.
+    await assert.rejects(
+      auditInProgressCeremony({ ...openArgs, getBaseZkey: async () => sealed.fullSealedZkey }),
+      /head zkey does not verify from the genesis zkey/,
+    );
+    // The genesis is not requested before the input files pass.
+    let asked = false;
+    await assert.rejects(auditInProgressCeremony({
+      ...openArgs, actualR1csBlobId: 'wrong-content', getBaseZkey: async () => { asked = true; return baseZkey; },
+    }), /r1cs Walrus blob id mismatch/);
+    assert.equal(asked, false);
+  });
+
   await t.test('the complete final audit passes with one participant and the final beacon', async () => {
-    assert.deepEqual(await verifyFinalArtifacts(auditArgs), { contributionCount: 2 });
+    assert.deepEqual(await auditClosedCeremony(auditArgs), { contributionCount: 2 });
   });
   await t.test('audit rejects a valid beacon-only transcript with no participant contribution', async () => {
     const beaconOnlyZkey = path.join(tmp, 'beacon-only.zkey');
     const hash = await snarkjs.zKey.beacon(baseZkey, beaconOnlyZkey, 'final-beacon', BEACON, 10, snLog);
     const info = await readContributionInfo(beaconOnlyZkey);
     assert.deepEqual(info.contributions.map((entry) => entry.type), [1]);
-    await assert.rejects(verifyFinalArtifacts({
+    await assert.rejects(auditClosedCeremony({
       ...auditArgs,
       ceremony: {
         ...ceremony,
@@ -197,7 +243,7 @@ test('offline ceremony: genesis, CLI contribution, isolated verification, beacon
     const last = await snarkjs.zKey.beacon(firstBeaconZkey, twoBeaconZkey, 'final-beacon', BEACON, 10, snLog);
     const info = await readContributionInfo(twoBeaconZkey);
     assert.deepEqual(info.contributions.map((entry) => entry.type), [1, 1]);
-    await assert.rejects(verifyFinalArtifacts({
+    await assert.rejects(auditClosedCeremony({
       ...auditArgs,
       ceremony: {
         ...ceremony,
@@ -225,22 +271,22 @@ test('offline ceremony: genesis, CLI contribution, isolated verification, beacon
     await t.test(`audit rejects a changed ${name}`, async () => {
       const changed = structuredClone(ceremony);
       change(changed);
-      await assert.rejects(verifyFinalArtifacts({ ...auditArgs, ceremony: changed }), error);
+      await assert.rejects(auditClosedCeremony({ ...auditArgs, ceremony: changed }), error);
     });
   }
   await t.test('audit rejects a mismatched R1CS content id', async () => {
-    await assert.rejects(verifyFinalArtifacts({ ...auditArgs, actualR1csBlobId: 'wrong-content' }), /r1cs Walrus blob id mismatch/);
+    await assert.rejects(auditClosedCeremony({ ...auditArgs, actualR1csBlobId: 'wrong-content' }), /r1cs Walrus blob id mismatch/);
   });
   await t.test('audit propagates file comparison errors instead of treating them as mismatches', async () => {
     await assert.rejects(
-      verifyFinalArtifacts({ ...auditArgs, localR1cs: path.join(tmp, 'missing.r1cs') }),
+      auditClosedCeremony({ ...auditArgs, localR1cs: path.join(tmp, 'missing.r1cs') }),
       (error) => error.status > 1,
     );
   });
   await t.test('audit rejects a changed verification key', async () => {
     const badVkey = path.join(tmp, 'bad.vkey.json');
     fs.writeFileSync(badVkey, '{}');
-    await assert.rejects(verifyFinalArtifacts({ ...auditArgs, finalVkey: badVkey }), /vkey does not match/);
+    await assert.rejects(auditClosedCeremony({ ...auditArgs, finalVkey: badVkey }), /vkey does not match/);
   });
   await t.test('audit rejects changed final params even when the transcript matches', async () => {
     const badParams = path.join(tmp, 'bad-final.p2c');
@@ -257,7 +303,7 @@ test('offline ceremony: genesis, CLI contribution, isolated verification, beacon
     assert.ok(offset < bytes.length, 'fixture has an L section');
     fs.writeFileSync(badParams, bytes);
     assert.deepEqual((await readContributionInfo(badParams)).hashes, (await readContributionInfo(sealed.sealedP2c)).hashes);
-    await assert.rejects(verifyFinalArtifacts({
+    await assert.rejects(auditClosedCeremony({
       ...auditArgs,
       contributions: [auditArgs.contributions[0], { sharedBlobId: 'final-blob', file: badParams }],
     }), /does not derive the final params blob/);

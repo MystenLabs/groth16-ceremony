@@ -7,7 +7,11 @@ import { sameFileBytes } from '../lib/files.js';
 import { canonicalJsonBytes } from '../lib/json.js';
 import { b2sumFile, sha256File, verifyPhase1Digest } from './commitments.js';
 import { verifyBlobId } from './walrus.js';
-import { readContributionInfo, extractParams, exportVerificationKey, verifyZkeyFromR1cs, snarkLogger } from './snarkjs.js';
+import {
+  readContributionInfo, extractParams, exportVerificationKey, verifyZkeyFromR1cs, snarkLogger,
+  assembleParams, verifyFromInit,
+} from './snarkjs.js';
+import { verifyBaseCircuit } from './verify_contribution.js';
 
 const b64Hex = (v) => Buffer.from(v || '', 'base64').toString('hex');
 function assertOk(condition, message) {
@@ -41,24 +45,8 @@ async function verifyFinalVkey({ finalZkey, finalVkey, log }) {
   assertOk(Buffer.compare(expected, actual) === 0, 'uploaded final vkey does not match final zkey export');
 }
 
-export function checkFinalCeremony(ceremony) {
-  const phase = ceremony.phase?.['@variant'] || 'Setup';
-  assertOk(phase === 'Closed', `ceremony phase is ${phase}; final audit only runs after Closed`);
-  const chain = Array.isArray(ceremony.chain) ? ceremony.chain : [];
-  assertOk(chain.length > 0, 'closed ceremony has no accepted final contribution');
-  assertOk(ceremony.head_blob_id === chain.at(-1).blob_id, 'head_blob_id does not match final chain entry');
-  const finalBeaconHex = b64Hex(ceremony.final_beacon);
-  assertOk(finalBeaconHex.length === 64, 'final beacon is not 32 bytes');
-  const phase1Digest = b64Hex(ceremony.phase1_digest);
-  assertOk(/^[0-9a-f]{128}$/.test(phase1Digest), 'ceremony phase1_digest is not 64 bytes');
-  return { chain, finalBeaconHex, phase1Digest };
-}
-
-export async function verifyFinalArtifacts({
-  ceremony, r1cs, expectedR1csBlobId, actualR1csBlobId, localR1cs,
-  ptau, finalZkey, finalVkey, contributions, workdir, log = () => {},
-}) {
-  const { chain, finalBeaconHex, phase1Digest } = checkFinalCeremony(ceremony);
+// Checks the two input files against the commitments of the ceremony.
+async function verifyInputFiles({ r1cs, expectedR1csBlobId, actualR1csBlobId, localR1cs, ptau, phase1Digest, log }) {
   verifyBlobId(actualR1csBlobId, expectedR1csBlobId);
   log(`r1cs Walrus blob id ok ${actualR1csBlobId}`);
   log(`r1cs sha256 ${await sha256File(r1cs)}`);
@@ -71,6 +59,92 @@ export async function verifyFinalArtifacts({
   log(`phase-1 digest ok ${phase1Digest.slice(0, 24)}...`);
   log(`phase-1 sha256 ${await sha256File(ptau)}`);
   log(`phase-1 b2sum ${phase1Digest}`);
+}
+
+// Checks each chain entry against its downloaded blob and against the transcript of one full zkey.
+// It returns the on-chain contribution hashes in order.
+async function verifyChainEntries({ chain, contributions, zkeyHashes, zkeyLabel, log }) {
+  assertOk(contributions.length === chain.length, 'downloaded contribution count does not match ceremony chain');
+  const chainHashes = [];
+  for (let i = 0; i < chain.length; i++) {
+    const c = chain[i];
+    const label = `chain #${i + 1} ${c.name || '(unnamed)'}`;
+    assertOk(contributions[i].sharedBlobId === c.blob_id, `${label} downloaded blob does not match chain entry`);
+    const onchainHash = b64Hex(c.contribution_hash);
+    assertOk(/^[0-9a-f]{128}$/.test(onchainHash), `${label} on-chain contribution_hash is not 64 bytes`);
+    const info = await readContributionInfo(contributions[i].file);
+    assertOk(info.hashes.length === i + 1, `${label} has ${info.hashes.length} contributions, expected ${i + 1}`);
+    assertHashArrayEq(info.hashes.slice(0, i), chainHashes, `${label} prefix`);
+    assertOk(info.hashes[i] === onchainHash, `${label} blob contribution hash does not match on-chain contribution_hash`);
+    assertOk(onchainHash === zkeyHashes[i], `${label} on-chain contribution_hash does not match ${zkeyLabel}`);
+    chainHashes.push(onchainHash);
+    log(`${label}: contribution hash and prefix verified`);
+  }
+  return chainHashes;
+}
+
+export function ceremonyPhase(ceremony) {
+  return ceremony.phase?.['@variant'] || 'Setup';
+}
+
+// Read the part of the on-chain record that each audit uses. The caller checks the phase.
+export function readCeremonyRecord(ceremony) {
+  const chain = Array.isArray(ceremony.chain) ? ceremony.chain : [];
+  assertOk(chain.length > 0, `ceremony has no accepted contribution; its phase is ${ceremonyPhase(ceremony)}`);
+  assertOk(ceremony.head_blob_id === chain.at(-1).blob_id, 'head_blob_id does not match the last chain entry');
+  const phase1Digest = b64Hex(ceremony.phase1_digest);
+  assertOk(/^[0-9a-f]{128}$/.test(phase1Digest), 'ceremony phase1_digest is not 64 bytes');
+  return { chain, phase1Digest };
+}
+
+// Audit of a ceremony in progress: the input files, each accepted contribution, and the current head.
+// `getBaseZkey` gives the path of the genesis zkey. It runs after the checks of the input files,
+// so that a genesis is never built from a wrong input. The audit binds the record to the R1CS
+// file only when the genesis zkey comes from these R1CS and phase-1 files.
+export async function auditInProgressCeremony({
+  ceremony, r1cs, expectedR1csBlobId, actualR1csBlobId, localR1cs,
+  ptau, getBaseZkey, contributions, workdir, log = () => {},
+}) {
+  const phase = ceremonyPhase(ceremony);
+  assertOk(phase === 'Phase2Contribute' || phase === 'Phase2Beacon', `ceremony phase is ${phase}; the audit of a ceremony in progress needs Phase2Contribute or Phase2Beacon`);
+  const { chain, phase1Digest } = readCeremonyRecord(ceremony);
+  await verifyInputFiles({ r1cs, expectedR1csBlobId, actualR1csBlobId, localR1cs, ptau, phase1Digest, log });
+  const baseZkey = await getBaseZkey();
+
+  const head = contributions.at(-1)?.file;
+  assertOk(head, 'no downloaded contribution');
+  await verifyBaseCircuit(baseZkey, head);
+  const tmp = fs.mkdtempSync(path.join(workdir, 'head-'));
+  try {
+    const headZkey = path.join(tmp, 'head.zkey');
+    log('assembling the full zkey of the current head');
+    await assembleParams({ baseZkey, params: head, fullZkey: headZkey, logger: snarkLogger(log) });
+    log('verifying the head zkey against the genesis zkey and the phase-1 file');
+    assertOk(await verifyFromInit(baseZkey, ptau, headZkey, snarkLogger(log)) === true, 'head zkey does not verify from the genesis zkey');
+    const headInfo = await readContributionInfo(headZkey);
+    assertOk(headInfo.hashes.length === chain.length, `head zkey has ${headInfo.hashes.length} contributions, ceremony chain has ${chain.length}`);
+    // Only the organizer adds a beacon entry, at the seal. A head in progress has none.
+    assertOk(headInfo.contributions.every((entry) => entry.type === 0), 'head zkey has a beacon entry');
+    const chainHashes = await verifyChainEntries({ chain, contributions, zkeyHashes: headInfo.hashes, zkeyLabel: 'head zkey', log });
+    assertHashArrayEq(chainHashes, headInfo.hashes, 'on-chain chain');
+  } finally {
+    fs.rmSync(tmp, { recursive: true, force: true });
+  }
+  log(`head params b2sum ${await b2sumFile(head)}`);
+  return { contributionCount: chain.length };
+}
+
+// Audit of a closed ceremony: the input files, each accepted contribution, the final beacon, and the final files.
+export async function auditClosedCeremony({
+  ceremony, r1cs, expectedR1csBlobId, actualR1csBlobId, localR1cs,
+  ptau, finalZkey, finalVkey, contributions, workdir, log = () => {},
+}) {
+  const phase = ceremonyPhase(ceremony);
+  assertOk(phase === 'Closed', `ceremony phase is ${phase}; final audit only runs after Closed`);
+  const { chain, phase1Digest } = readCeremonyRecord(ceremony);
+  const finalBeaconHex = b64Hex(ceremony.final_beacon);
+  assertOk(finalBeaconHex.length === 64, 'final beacon is not 32 bytes');
+  await verifyInputFiles({ r1cs, expectedR1csBlobId, actualR1csBlobId, localR1cs, ptau, phase1Digest, log });
 
   log('verifying final zkey with snarkjs zkey verify r1cs');
   verifyZkeyFromR1cs({ r1cs, ptau, zkey: finalZkey });
@@ -86,22 +160,7 @@ export async function verifyFinalArtifacts({
   assertOk(beforeBeacon.length > 0, 'closed ceremony has no accepted non-beacon contribution');
   assertOk(beforeBeacon.every((entry) => entry.type === 0), 'final zkey has a beacon entry before the last entry');
 
-  assertOk(contributions.length === chain.length, 'downloaded contribution count does not match ceremony chain');
-  const chainHashes = [];
-  for (let i = 0; i < chain.length; i++) {
-    const c = chain[i];
-    const label = `chain #${i + 1} ${c.name || '(unnamed)'}`;
-    assertOk(contributions[i].sharedBlobId === c.blob_id, `${label} downloaded blob does not match chain entry`);
-    const onchainHash = b64Hex(c.contribution_hash);
-    assertOk(/^[0-9a-f]{128}$/.test(onchainHash), `${label} on-chain contribution_hash is not 64 bytes`);
-    const info = await readContributionInfo(contributions[i].file);
-    assertOk(info.hashes.length === i + 1, `${label} has ${info.hashes.length} contributions, expected ${i + 1}`);
-    assertHashArrayEq(info.hashes.slice(0, i), chainHashes, `${label} prefix`);
-    assertOk(info.hashes[i] === onchainHash, `${label} blob contribution hash does not match on-chain contribution_hash`);
-    assertOk(onchainHash === finalZkeyInfo.hashes[i], `${label} on-chain contribution_hash does not match final zkey`);
-    chainHashes.push(onchainHash);
-    log(`${label}: contribution hash and prefix verified`);
-  }
+  const chainHashes = await verifyChainEntries({ chain, contributions, zkeyHashes: finalZkeyInfo.hashes, zkeyLabel: 'final zkey', log });
   assertHashArrayEq(chainHashes, finalZkeyInfo.hashes, 'on-chain chain');
   const finalParams = contributions.at(-1).file;
   await verifyExtractedFinalParams({ finalZkey, finalParams, runDir: workdir, log });
