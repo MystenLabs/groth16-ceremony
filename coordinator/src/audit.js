@@ -13,8 +13,6 @@
 
 import fs from 'node:fs';
 import path from 'node:path';
-import { Readable } from 'node:stream';
-import { pipeline } from 'node:stream/promises';
 import { parseArgs } from 'node:util';
 import { makeClient, readCeremony } from './lib/chain.js';
 import { loadIds, log, net, resolveCeremonyPaths, standaloneAuditPaths } from './lib/config.js';
@@ -22,27 +20,20 @@ import { checkFinalCeremony, verifyFinalArtifacts } from './crypto/audit.js';
 import { readBlob, blobIdForFile } from './crypto/walrus.js';
 
 const { values: o, positionals } = parseArgs({ allowPositionals: true, options: {
-  ceremony: { type: 'string' },
   run: { type: 'string' },
-  manifest: { type: 'string' },
-  deployments: { type: 'string' },
   network: { type: 'string', default: 'testnet' },
   workdir: { type: 'string' },
-  'blob-cache': { type: 'string' },
   ptau: { type: 'string' },
-  'phase1-url': { type: 'string' },
   fresh: { type: 'boolean' },
 } });
 
-if (o.deployments) console.error('warning: --deployments is deprecated; use --manifest or --run');
-const paths = o.run || o.manifest || o.deployments
-  ? resolveCeremonyPaths(o)
-  : null;
+// The organizer gives --run. An external auditor gives the ceremony object id.
+const paths = o.run ? resolveCeremonyPaths({ run: o.run, workdir: o.workdir }) : null;
 const manifestIds = paths ? loadIds(o.network, paths.manifest) : null;
-const CER = o.ceremony || positionals[0] || manifestIds?.ceremonyId;
+const CER = positionals[0] || manifestIds?.ceremonyId;
 if (!CER) {
   console.error('usage: node coordinator/src/audit.js --run <name> [--network testnet] [--ptau pot_final.ptau]');
-  console.error('   or: node coordinator/src/audit.js <closed-ceremony-object-id> (--ptau <file> | --phase1-url <address>) [--workdir ./audit-work]');
+  console.error('   or: node coordinator/src/audit.js <closed-ceremony-object-id> --ptau <file> [--network testnet] [--workdir ./audit-work] [--fresh]');
   process.exit(1);
 }
 net(o.network);
@@ -64,29 +55,13 @@ function isZeroId(id) {
   return !id || id === ZERO_ID || /^0x0+$/.test(id);
 }
 
-async function download(url, dest) {
-  fs.mkdirSync(path.dirname(dest), { recursive: true });
-  const res = await fetch(url);
-  if (!res.ok) throw new Error(`download ${url}: HTTP ${res.status}`);
-  if (!res.body) throw new Error(`download ${url}: empty response body`);
-  await pipeline(Readable.fromWeb(res.body), fs.createWriteStream(dest));
-}
-
-async function ensurePtau(runDir) {
+// The phase-1 file is local. Each ceremony names its own file, so there is no default.
+function findPtau() {
   const runPtau = paths && path.join(paths.artifacts, 'pot_final.ptau');
   const manifestPtau = manifestIds?.dep.phase1?.file;
-  const localPtau = o.ptau || (runPtau && fs.existsSync(runPtau) ? runPtau : null) || (manifestPtau && fs.existsSync(manifestPtau) ? manifestPtau : null);
-  if (localPtau) {
-    assertOk(fs.existsSync(localPtau), `ptau not found: ${localPtau}`);
-    return localPtau;
-  }
-  const ptau = path.join(runDir, 'pot_final.ptau');
-  if (o.fresh || !fs.existsSync(ptau)) {
-    // There is no default address. Each ceremony has its own phase-1 file.
-    assertOk(o['phase1-url'], 'no phase-1 file is available; give --ptau <file> or --phase1-url <address>');
-    log(`downloading phase-1 ptau from ${o['phase1-url']}`);
-    await download(o['phase1-url'], ptau);
-  }
+  const ptau = o.ptau || [runPtau, manifestPtau].find((file) => file && fs.existsSync(file));
+  assertOk(ptau, 'no phase-1 file is available; give --ptau <file>');
+  assertOk(fs.existsSync(ptau), `ptau not found: ${ptau}`);
   return ptau;
 }
 
@@ -101,7 +76,7 @@ async function main() {
   const client = makeClient(o.network);
   const standalone = paths ? null : standaloneAuditPaths(CER, o.workdir);
   const runDir = paths?.audit || standalone.audit;
-  const blobCache = o['blob-cache'] || paths?.blobs || standalone.blobs;
+  const blobCache = paths?.blobs || standalone.blobs;
   fs.mkdirSync(runDir, { recursive: true });
   fs.mkdirSync(blobCache, { recursive: true });
 
@@ -112,7 +87,7 @@ async function main() {
   log('walrus blob reads via cli');
   const { chain } = checkFinalCeremony(ceremony);
   // Find the phase-1 file first. The audit then stops before the other downloads if it is missing.
-  const ptau = await ensurePtau(runDir);
+  const ptau = findPtau();
 
   const r1cs = await fetchShared({
     network: o.network,
