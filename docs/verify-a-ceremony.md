@@ -8,13 +8,13 @@ git clone https://github.com/MystenLabs/groth16-ceremony.git
 cd groth16-ceremony
 npm --prefix coordinator ci
 
-node coordinator/src/audit.js <ceremony object id> --network mainnet \
-  --ptau <phase-1 file> --workdir audit-work
+node coordinator/src/audit.js zklogin-v2
 ```
 
-You need Node.js 24, Git, the Walrus CLI, and 15 GB of free disk space. The page of
-each ceremony gives the ceremony object ID and the phase-1 file, for example
-[zkLogin v2](../ceremonies/zklogin-v2/README.md#ceremony-facts).
+You need Node.js 24, Git, the Walrus CLI, and 15 GB of free disk space. The name is a
+folder of [`ceremonies/`](../ceremonies/). Its `ceremony.json` gives the network, the
+ceremony object ID, and the Walrus blob ID of the phase-1 file. The audit downloads each
+file from Walrus. If you have the phase-1 file already, give it with `--ptau <file>`.
 
 ## What the audit checks
 
@@ -31,7 +31,7 @@ The audit prints `audit OK so far` during the ceremony, and `audit OK` after its
 It stops at the first check that fails and prints the reason.
 
 During the ceremony, the first audit builds the start parameters, which is the longest
-step. A later audit with the same `--workdir` uses them again.
+step. A later audit uses them again.
 
 ## What the audit does not show
 

@@ -37,6 +37,17 @@ export function ceremonyTitle(network, ceremonyId, root = REPO_ROOT) {
   }
   return null;
 }
+
+// Read `ceremonies/<name>/ceremony.json`. `phase1BlobId` is the Walrus blob ID of the phase-1 file, or null.
+export function readCeremonyFile(name, root = REPO_ROOT) {
+  const file = path.join(root, 'ceremonies', name, 'ceremony.json');
+  if (!/^[a-z0-9][a-z0-9-]*$/.test(name) || !fs.existsSync(file)) {
+    throw new Error(`unknown ceremony "${name}"; give a folder name of ceremonies/ or a ceremony object ID`);
+  }
+  const config = JSON.parse(fs.readFileSync(file, 'utf8'));
+  if (!config.ceremonyId || !NETWORKS[config.network]) throw new Error(`${file} must set "ceremonyId" and "network"`);
+  return { ceremonyId: config.ceremonyId, network: config.network, phase1BlobId: config.phase1BlobId || null };
+}
 const ARTIFACTS = path.join(REPO_ROOT, 'coordinator', 'artifacts');
 
 export const ts = () => new Date().toISOString();

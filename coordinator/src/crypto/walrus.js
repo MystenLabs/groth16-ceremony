@@ -194,7 +194,7 @@ async function readContentBlobToFile(network, contentBlobId, outFile) {
 
 // Cache a content blob by content id. The public read path below accepts a
 // SharedBlob id and hides this content-id detail from callers.
-async function cacheContentBlob(network, contentBlobId, { force = false, cacheDir = defaultCacheDir(), suffix = '.p2c' } = {}) {
+export async function cacheContentBlob(network, contentBlobId, { force = false, cacheDir = defaultCacheDir(), suffix = '.p2c' } = {}) {
   fs.mkdirSync(cacheDir, { recursive: true });
   const p = path.join(cacheDir, `${contentBlobId}${suffix}`);
   const short = contentBlobId.slice(0, 10);

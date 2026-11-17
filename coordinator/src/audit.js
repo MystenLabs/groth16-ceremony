@@ -22,27 +22,35 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { parseArgs } from 'node:util';
 import { makeClient, readCeremony } from './lib/chain.js';
-import { loadIds, log, net, resolveCeremonyPaths, standaloneAuditPaths } from './lib/config.js';
+import { loadIds, log, net, readCeremonyFile, resolveCeremonyPaths, standaloneAuditPaths } from './lib/config.js';
 import { auditClosedCeremony, auditInProgressCeremony, ceremonyPhase, readCeremonyRecord } from './crypto/audit.js';
 import { buildGenesis } from './crypto/snarkjs.js';
-import { readBlob, blobIdForFile } from './crypto/walrus.js';
+import { readBlob, blobIdForFile, cacheContentBlob } from './crypto/walrus.js';
 
 const { values: o, positionals } = parseArgs({ allowPositionals: true, options: {
   run: { type: 'string' },
-  network: { type: 'string', default: 'testnet' },
+  network: { type: 'string' },
   workdir: { type: 'string' },
   ptau: { type: 'string' },
   fresh: { type: 'boolean' },
 } });
 
-// The organizer gives --run. An external auditor gives the ceremony object id.
+// The organizer gives --run. An external auditor gives a ceremony name or a ceremony object ID.
+// A ceremony name is a folder of `ceremonies/`. Its ceremony.json gives the network,
+// the object ID, and the Walrus blob ID of the phase-1 file.
+const target = positionals[0];
+let named = null;
+if (target && !/^0x[0-9a-fA-F]+$/.test(target)) {
+  try { named = readCeremonyFile(target); } catch (e) { console.error(e.message); process.exit(1); }
+}
+o.network = o.network || named?.network || 'testnet';
 const paths = o.run ? resolveCeremonyPaths({ run: o.run, workdir: o.workdir }) : null;
 const manifestIds = paths ? loadIds(o.network, paths.manifest) : null;
-const CER = positionals[0] || manifestIds?.ceremonyId;
+const CER = named?.ceremonyId || target || manifestIds?.ceremonyId;
 if (!CER) {
-  console.error('usage: node coordinator/src/audit.js --run <name> [--network testnet] [--ptau pot_final.ptau]');
+  console.error('usage: node coordinator/src/audit.js <ceremony-name> [--workdir ./audit-work] [--fresh]');
   console.error('   or: node coordinator/src/audit.js <ceremony-object-id> --ptau <file> [--network testnet] [--workdir ./audit-work] [--fresh]');
-  console.error('For a ceremony in progress, the second form builds the genesis zkey from the r1cs and phase-1 files.');
+  console.error('   or: node coordinator/src/audit.js --run <name> [--network testnet] [--ptau pot_final.ptau]');
   process.exit(1);
 }
 net(o.network);
@@ -60,14 +68,19 @@ function isZeroId(id) {
   return !id || id === ZERO_ID || /^0x0+$/.test(id);
 }
 
-// The phase-1 file is local. Each ceremony names its own file, so there is no default.
-function findPtau() {
+// Find the phase-1 file: --ptau, then the run folder, then a download from Walrus.
+// The audit later compares the hash of the file with the on-chain phase1_digest.
+async function findPtau(blobCache) {
   const runPtau = paths && path.join(paths.artifacts, 'pot_final.ptau');
   const manifestPtau = manifestIds?.dep.phase1?.file;
-  const ptau = o.ptau || [runPtau, manifestPtau].find((file) => file && fs.existsSync(file));
-  assertOk(ptau, 'no phase-1 file is available; give --ptau <file>');
-  assertOk(fs.existsSync(ptau), `ptau not found: ${ptau}`);
-  return ptau;
+  const local = o.ptau || [runPtau, manifestPtau].find((file) => file && fs.existsSync(file));
+  if (local) {
+    assertOk(fs.existsSync(local), `ptau not found: ${local}`);
+    return local;
+  }
+  assertOk(named?.phase1BlobId, 'no phase-1 file is available; give --ptau <file>');
+  log(`phase-1 file: download of Walrus blob ${named.phase1BlobId}`);
+  return cacheContentBlob(o.network, named.phase1BlobId, { cacheDir: blobCache, suffix: '.ptau', force: o.fresh });
 }
 
 // The genesis zkey for the audit of a ceremony in progress.
@@ -120,7 +133,7 @@ async function main() {
   const { chain } = readCeremonyRecord(ceremony);
   if (!closed) log('the ceremony is in progress; this audit covers the accepted contributions so far');
   // Find the phase-1 file first. The audit then stops before the other downloads if it is missing.
-  const ptau = findPtau();
+  const ptau = await findPtau(blobCache);
 
   const r1cs = await fetchShared({
     network: o.network,
