@@ -43,6 +43,9 @@ The instructions of each ceremony give the details.
 
 - **The result is secure if one contributor is honest.** An honest contributor uses a
   secret random value and does not keep it.
+- **Phase 1 has the same rule.** Each ceremony adopts a public phase-1 file. It is secure
+  if one of its contributors was honest. The zkLogin v2 ceremony uses contribution `0086`
+  of the Perpetual Powers of Tau, whose chain has 67 contributions.
 - **The attestor can delay the ceremony, but it cannot forge it.** The on-chain record
   and the Walrus files let any person repeat each check of the attestor.
 - **The audit finds an invalid acceptance.** The contract trusts each `accept` that carries
