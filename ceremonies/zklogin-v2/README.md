@@ -127,8 +127,14 @@ prints it, and removes it from the log. Automatic funding is once for each addre
 After acceptance, the CLI returns leftover funds to the organizer only when the
 organizer funded the address. If that return fails, run the same command again.
 
-A self-funded address keeps its leftover funds. The CLI has no command to move them.
-The key of the address is in `state.json`, and a Sui wallet can import it.
+A self-funded address keeps its leftover funds. This command sends all of them to
+an address of your choice. It shows the amounts and asks for a confirmation.
+
+```sh
+./ceremony withdraw zklogin-v2 <your Sui address>
+```
+
+The command refuses an address whose funds came from the organizer.
 
 ## Your files
 
