@@ -1,4 +1,4 @@
-import { Transaction } from '@mysten/sui/transactions';
+import { Transaction, coinWithBalance } from '@mysten/sui/transactions';
 import { net } from './config.js';
 import { readCeremony } from './chain.js';
 import { fundingSecretMatches } from '../crypto/funding_secret.js';
@@ -16,20 +16,12 @@ export async function buildFundingTransaction({ client, owner, network, packageI
   });
   if (sui > 0n) tx.transferObjects([tx.splitCoins(tx.gas, [tx.pure.u64(sui)])[0]], tx.pure.address(address));
   if (wal > 0n) {
-    let cursor = null, total = 0n;
-    const coins = [];
-    do {
-      const page = await client.core.listCoins({ owner, coinType: net(network).walCoinType, cursor });
-      for (const coin of page.objects) {
-        coins.push(coin); total += BigInt(coin.balance);
-        if (total >= wal) break;
-      }
-      cursor = page.hasNextPage ? page.cursor : null;
-    } while (total < wal && cursor);
-    if (total < wal) throw new FundingError(503, 'organizer has insufficient WAL; contact the organizer');
-    const primary = tx.object(coins[0].objectId);
-    if (coins.length > 1) tx.mergeCoins(primary, coins.slice(1).map((coin) => tx.object(coin.objectId)));
-    tx.transferObjects([tx.splitCoins(primary, [tx.pure.u64(wal)])[0]], tx.pure.address(address));
+    const coinType = net(network).walCoinType;
+    // The total includes the coin objects and the address balance of the organizer.
+    const { balance } = await client.core.getBalance({ owner, coinType });
+    if (BigInt(balance.balance) < wal) throw new FundingError(503, 'organizer has insufficient WAL; contact the organizer');
+    // The SDK selects the sources when it builds the transaction.
+    tx.transferObjects([coinWithBalance({ type: coinType, balance: wal })], tx.pure.address(address));
   }
   return tx;
 }
