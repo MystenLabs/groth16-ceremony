@@ -166,6 +166,5 @@ the key in `state.json` has no more use. Keep the receipt.
 | Phase 1 `b2sum` | `c9972d6f19100faad8382a585dac7fed6090320228c1bb0e64e32cc5689c340e4e8aeb4790eb1297649de83a798b4cebe624d9da4e74fa94d8767c4047c12a62`. The `phase1_digest` field of the ceremony object must have the same value. |
 | Final beacon of phase 2 | Drawn on-chain from Sui randomness when the organizer ends the contributions |
 
-The [repository README](../../README.md) describes how the ceremony works.
-[The security model](../../docs/security-model.md) states what the ceremony guarantees.
+The [repository README](../../README.md) describes how the ceremony works and what it guarantees.
 [Verify a ceremony](../../docs/verify-a-ceremony.md) shows how to check the record.

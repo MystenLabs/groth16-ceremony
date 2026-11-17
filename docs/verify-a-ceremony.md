@@ -102,7 +102,7 @@ The audit prints `audit OK` when each check passes. It stops at the first check 
 
 ## What these checks do not show
 
-- They do not show that the circuit is correct. They show that the keys belong to the
-  committed R1CS file.
-- They do not show that a contributor was honest. [The security model](security-model.md)
-  explains why one honest contributor is enough.
+- Circuit authenticity is assumed in this process. The checks show that the keys belong
+  to the committed R1CS file. They do not examine the circuit.
+- They do not show that a contributor was honest. The result is secure if one contributor
+  in the accepted chain is honest.

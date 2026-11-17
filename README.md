@@ -45,10 +45,14 @@ The instructions of each ceremony give the details.
   secret random value and does not keep it.
 - **The attestor can delay the ceremony, but it cannot forge it.** The on-chain record
   and the Walrus files let any person repeat each check of the attestor.
+- **The audit finds an invalid acceptance.** The contract trusts each `accept` that carries
+  the organizer key. A defective attestor, or a person with the key, can accept an invalid
+  submission. The audit finds this fault.
+- **Circuit authenticity is assumed in this process.** The ceremony binds the keys to the
+  committed R1CS file. It does not examine the circuit.
 - **The organizer selects the contributors** while a ceremony uses an allowlist. A ceremony
   can also be open to any person, and the organizer can change this during the contributions.
 
-[The security model](docs/security-model.md) gives the full list.
 [Verify a ceremony](docs/verify-a-ceremony.md) shows how to check the record yourself.
 
 ## Terms
@@ -85,7 +89,6 @@ the MystenLabs fork, at a fixed commit.
 | Document | Reader |
 | --- | --- |
 | [zkLogin v2 instructions](ceremonies/zklogin-v2/README.md) | Contributors to the zkLogin v2 ceremony |
-| [The security model](docs/security-model.md) | Each person who wants to know what the ceremony guarantees |
 | [Verify a ceremony](docs/verify-a-ceremony.md) | Auditors |
 | [Cryptographic audit map](coordinator/src/crypto/README.md) | Reviewers of the cryptographic code |
 | [Running a ceremony](docs/running-a-ceremony.md) | Organizers |
