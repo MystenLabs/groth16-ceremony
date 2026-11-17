@@ -64,29 +64,19 @@ from idle sleep when it can. A laptop still needs an open lid.
 
 ### Find your hash on-chain
 
-Your receipt file has two values for this check:
+Your receipt file has the values for this check:
 
-- `contributionHash`: your contribution hash, as 128 hexadecimal characters.
+- `contributionHash`: your contribution hash in hexadecimal. The ceremony record uses this form.
+- `contributionHashBase64`: the same 64 bytes in base64. A Sui explorer shows this form.
 - `submitDigest`: the transaction that submitted your contribution.
 
 To see the hash in a Sui explorer:
 
-1. Open the transaction `submitDigest` on Sui mainnet.
+1. Open the transaction `submitDigest` on Sui mainnet. The CLI prints a link to it.
 2. Open its events. The `ContributionSubmitted` event has the field `contribution_hash`.
+   It must be equal to `contributionHashBase64`.
 3. The ceremony object shows the same value. Each entry of its `chain` field has a
    `contribution_hash`.
-
-An explorer can show the hash in a different form. The receipt uses hexadecimal.
-An explorer frequently uses base64. Both forms are the same 64 bytes. To compare them,
-convert one form to the other:
-
-```bash
-# From the explorer form (base64) to the receipt form (hexadecimal)
-echo '<base64 value>' | base64 -d | xxd -p -c 64
-
-# From the receipt form (hexadecimal) to the explorer form (base64)
-echo '<hexadecimal value>' | xxd -r -p | base64 | tr -d '\n'
-```
 
 ## If something goes wrong
 

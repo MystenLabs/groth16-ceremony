@@ -48,6 +48,7 @@ import { CEREMONY_ID, findCeremonyById, readCeremonyConfig, resolveWorkdir, star
 import { createUi, formatDuration, visibleText } from '../src/ui.js';
 import { askLine, askHidden, askYesNo } from '../src/prompt.js';
 import { displayName, nameBytes, MAX_NAME_BYTES } from '../src/display-name.js';
+import { hexToBase64 } from '../src/hash-forms.js';
 import { explainFailure, errorMessage, assertTurnOpen, UPLOAD_MARGIN_MS } from '../src/failures.js';
 import { renderResultCard } from '../src/result-card.js';
 
@@ -538,6 +539,7 @@ async function cmdContribute(ceremonyId, opts) {
     const hashHex = c.out.hashHex;
     timings.contributesec = c.sec;
     ui.detail(`contribution hash: ${hashHex}`);
+    ui.detail(`contribution hash in base64: ${hexToBase64(hashHex)}`);
     ui.step('Pack');
     const cp = await timed(() => compress(c.out.bytes, snLog));
     const p2c = cp.out;
@@ -578,7 +580,7 @@ async function cmdContribute(ceremonyId, opts) {
     }
 
     const receiptPath = path.join(workdir, `receipt-${hashHex.slice(0, 8)}.json`);
-    fs.writeFileSync(receiptPath, JSON.stringify({ name, ceremonyId, contributionHash: hashHex, blobId, contentBlobId, address: addr, submitDigest: sd, verdict, funding: funding || null, refundDigest: refund?.digest || null, timings, finishedAt: new Date().toISOString() }, null, 2));
+    fs.writeFileSync(receiptPath, JSON.stringify({ name, ceremonyId, contributionHash: hashHex, contributionHashBase64: hexToBase64(hashHex), blobId, contentBlobId, address: addr, submitDigest: sd, verdict, funding: funding || null, refundDigest: refund?.digest || null, timings, finishedAt: new Date().toISOString() }, null, 2));
     ui.detail(`receipt saved: ${receiptPath}`);
     await postTelemetry(coordinatorBase, {
       cli: true, status: verdict, name, ceremony_id: ceremonyId, storage: 'walrus',
@@ -741,7 +743,7 @@ function printResult(ui, { headline, card, funds, network, submitDigest, walrusI
 
   if (receiptPath) {
     ui.print('');
-    ui.print(`  ${p('dim', 'Receipt (has the full hash):')} ${shortPath(receiptPath)}`);
+    ui.print(`  ${p('dim', 'Receipt (has the full hash, in hexadecimal and in base64):')} ${shortPath(receiptPath)}`);
   }
 }
 
