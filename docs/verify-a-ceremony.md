@@ -11,7 +11,7 @@ npm --prefix coordinator ci
 node coordinator/src/audit.js zklogin-v2
 ```
 
-You need Node.js 24, Git, the Walrus CLI, and 15 GB of free disk space. The name is a
+You need Node.js 22 or 24, Git, the Walrus CLI, and 15 GB of free disk space. The name is a
 folder of [`ceremonies/`](../ceremonies/). Its `ceremony.json` gives the network, the
 ceremony object ID, and the Walrus blob ID of the phase-1 file. The audit downloads each
 file from Walrus. If you have the phase-1 file already, give it with `--ptau <file>`.
