@@ -9,6 +9,5 @@ funding-secret.json.*.tmp
 funding-payouts.jsonl
 funding.lock
 
-# Artifacts the organizer supplies locally (base zkey/ptau, test fixtures); keep only the README.
-coordinator/artifacts/*
-!coordinator/artifacts/README.md
+# Large files that an organizer keeps locally (base zkey, phase-1 file, test fixtures).
+coordinator/artifacts/

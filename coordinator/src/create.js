@@ -9,7 +9,6 @@
 //     --run zklogin-ceremony --permissionless
 //
 // `phase1_digest` is the BLAKE2b-512 / b2sum of the phase-1 file.
-// coordinator/artifacts/README.md describes that file.
 // Pass --ptau <pot_final.ptau> to hash that file locally, or --phase1-hash
 // <hex> directly. The genesis params come later via `admin.js start-phase2`.
 // Writes the run-specific ceremony manifest.
