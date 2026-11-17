@@ -56,6 +56,7 @@ import { resolvePhase1Digest } from './crypto/commitments.js';
 import { prepareMovePackage } from './lib/move-package.js';
 import { requireBlobIsDurable, writeBlob, blobIdForFile, verifyBlobId } from './crypto/walrus.js';
 import { updateFundingConfig, requirePublicCoordinatorUrl } from './lib/funding-config.js';
+import { ensureSuiCoinObject } from './lib/gas-coin.js';
 
 const { values: o } = parseArgs({ options: {
   r1cs: { type: 'string' },
@@ -138,6 +139,7 @@ async function resolveR1csBlob(client) {
   }
 
   const size = fs.statSync(o.r1cs).size;
+  await ensureSuiCoinObject(client, loadKeypair({ workdir: paths.workdir }), log);
   log(`uploading r1cs ${o.r1cs} (${(size / 1048576).toFixed(2)} MB) to Walrus via CLI…`);
   return writeBlob(o.network, client, o.r1cs, { label: 'r1cs', workdir: paths.workdir });
 }
