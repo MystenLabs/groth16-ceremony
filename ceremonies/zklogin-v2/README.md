@@ -3,15 +3,21 @@
 These are the instructions for a contributor to the zkLogin v2 trusted-setup ceremony.
 The ceremony makes the Groth16 proving and verification keys for the zkLogin v2 circuit.
 
+Your contribution adds a secret random value to the parameters. The final keys are
+secure if one contributor is honest. So each honest contributor makes the result stronger.
+
+The [status page](https://zkceremony.sui.io/status) shows the ceremony state and the accepted contributions.
+
 ## Before you start
 
 - You need an invitation from the organizer. The ceremony uses an allowlist.
 - You need Git and Node.js 22, 24, or 26. With nvm: `nvm install 24 && nvm use 24`.
 - You need a machine that can stay on for your turn. Keep the terminal open and the laptop lid up.
+- Your turn takes 7 to 10 minutes. If other contributors are before you, you wait first.
 
 ## Contribute
 
-```bash
+```sh
 git clone https://github.com/MystenLabs/groth16-ceremony.git
 ./groth16-ceremony/ceremony contribute zklogin-v2
 ```
@@ -44,14 +50,17 @@ The steps are:
 
 1. **Prepare.** The CLI makes a contribution key and makes sure that it has enough SUI and WAL.
 2. **Wait for your turn.** One contributor has the slot at a time. The CLI claims the slot when it is free.
-   A turn has a time limit, 15 minutes by default, from the claim to the submission.
+   A wait is normal, and the CLI shows an estimate. During the wait, you can leave the CLI
+   running. You can also stop it and run the same command again later.
+   A turn has a time limit of 15 minutes, from the claim to the submission.
    The CLI does not start the upload with less than 3 minutes left in the turn.
 3. **Download.** It gets the current parameters from Walrus, about 123 MB, and checks them
    against the content ID on-chain.
-4. **Compute.** It adds your contribution.
+4. **Compute.** It adds your contribution. Your secret random value exists only in memory
+   during this step. The CLI never writes it to a file.
 5. **Upload.** It stores the result on Walrus.
 6. **Submit and verify.** It submits the contribution on Sui and waits up to 10 minutes
-   for the coordinator to verify and accept it.
+   for the attestor of the ceremony to verify and accept it.
 
 On the first run, the launcher installs the CLI dependencies. The CLI stops the machine
 from idle sleep when it can. A laptop still needs an open lid.
@@ -59,7 +68,10 @@ from idle sleep when it can. A laptop still needs an open lid.
 ## After your contribution
 
 - The CLI shows your contribution hash and the path to your receipt.
-- Publish the hash, so that others can check that the final transcript includes it.
+- Keep the receipt. With its hash, you can check later that the final transcript includes
+  your contribution.
+- You can publish the hash, for example on a social account. Then other persons can do the
+  same check.
 - The [status page](https://zkceremony.sui.io/status) shows the accepted contributions.
 
 ### Find your hash on-chain
@@ -99,7 +111,7 @@ To see the hash in a Sui explorer:
 The CLI checks the balance of the contribution address first:
 
 - Enough SUI and WAL: it uses the existing funds, even with a funding link.
-- Not enough funds, with a funding link: it asks the organizer's coordinator to
+- Not enough funds, with a funding link: it asks the server of the organizer to
   enroll and fund the address.
 - Not enough funds, without a funding link: it shows the address and waits for
   you to fund it. Ask the organizer to add your address to the allowlist.
@@ -121,6 +133,8 @@ ceremony-work/<network>/<ceremony-object-id>/
 ```
 
 The folder is inside the clone and does not depend on your current directory.
+After the ceremony accepts your contribution and the leftover funds are returned,
+the key in `state.json` has no more use. Keep the receipt.
 `./ceremony --help` lists all options, including the options for scripts.
 
 ## Ceremony facts
@@ -132,6 +146,8 @@ The folder is inside the clone and does not depend on your current directory.
 | R1CS `b2sum` | `bc8cdc434586a667aca8f5ab7c11ee14ece87e231570c43845a1cb0a8d82b268ed5dff1388f642476ad6c94c2f1451419e0a93ea57b8eb187163702f14af142f` |
 | R1CS on Walrus | Blob id `kQP5kFOpd6GN48C5B2vBaZqWwyEaeIHrGc9Eb4x_Ods`. The `r1cs_blob_id` field of the ceremony object is the shared blob object `0xa30ba93ee67719f124f4b1b374e3123d4679ddc97121cb948928c131a9341991`. |
 | Network | Sui mainnet |
+| Access | Permissioned. The organizer adds each contributor to the allowlist. |
+| Turn length | 15 minutes |
 | Ceremony object | `0xed7a3922c4eb8c7efa4392b5918118ef73f865a362a54d1260c0cbbc83e6bb71`, also in [`ceremony.json`](ceremony.json) |
 | Move package | `0x59c61edc0603f301b0295a5d2a9ace510bd26df2c4ca64c8dc91aecc75d08a28` |
 | Phase 1 | Contribution `0086` of the Perpetual Powers of Tau, reduced from 2^28 to 2^21, with drand round 6440000 as the final beacon. Its chain has 67 contributions, because the chain continues from contribution `0058` at contribution `0078`. |
@@ -140,3 +156,5 @@ The folder is inside the clone and does not depend on your current directory.
 | Final beacon of phase 2 | Drawn on-chain from Sui randomness when the organizer ends the contributions |
 
 The [repository README](../../README.md) describes how the ceremony works.
+[The security model](../../docs/security-model.md) states what the ceremony guarantees.
+[Verify a ceremony](../../docs/verify-a-ceremony.md) shows how to check the record.
