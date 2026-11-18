@@ -95,7 +95,7 @@ async function ensureBaseZkey(runDir, r1cs, ptau) {
   const outDir = path.join(runDir, 'genesis');
   const built = path.join(outDir, 'circuit_0000.zkey');
   if (o.fresh || !fs.existsSync(built)) {
-    log('building the genesis zkey from the r1cs and phase-1 files; this is the longest step');
+    log('building the genesis zkey from the r1cs and phase-1 files; this is the longest step (~30 mins for zklogin v2)');
     // Build in a temporary folder. A build that stops leaves no file that looks complete.
     const tmpDir = `${outDir}.tmp-${process.pid}`;
     fs.rmSync(tmpDir, { recursive: true, force: true });
