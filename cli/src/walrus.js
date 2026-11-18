@@ -30,19 +30,27 @@ export async function fetchBlob(suiClient, networkName, net, blobId, {
     }
   }
   onFallback({ error: aggregatorError });
+  // The SDK does not stop each step at the signal. So the limit is also a race.
+  // `AbortSignal.timeout` is not used: its timer does not keep the process alive.
+  const controller = new AbortController();
+  let timer;
+  const limit = new Promise((_resolve, reject) => {
+    timer = setTimeout(() => {
+      const error = new Error(`storage nodes sent no blob in ${nodeReadMs / 1000} seconds`);
+      controller.abort(error);
+      reject(error);
+    }, nodeReadMs);
+  });
   try {
-    // The SDK does not stop each step at the signal. So the limit is also a race.
-    const signal = AbortSignal.timeout(nodeReadMs);
-    const limit = new Promise((_resolve, reject) => {
-      signal.addEventListener('abort', () => reject(new Error(`storage nodes sent no blob in ${nodeReadMs / 1000} seconds`)));
-    });
-    const bytes = await Promise.race([readFromNodes(walrusClient, signal), limit]);
+    const bytes = await Promise.race([readFromNodes(walrusClient, controller.signal), limit]);
     return await checkBlob(walrusClient, blobId, bytes, 'storage nodes');
   } catch (e) {
     throw new Error(
       `download failed from the aggregator (${aggregatorError.message}) and from the storage nodes (${e.message})`,
       { cause: aggregatorError },
     );
+  } finally {
+    clearTimeout(timer);
   }
 }
 

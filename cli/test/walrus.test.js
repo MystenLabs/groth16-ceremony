@@ -54,9 +54,15 @@ test('a download tries the aggregator 4 times, then reads from the storage nodes
     calls++;
     throw new TypeError('fetch failed', { cause: new Error('getaddrinfo ENOTFOUND aggregator.example') });
   });
-  // Run the timers at once, and keep the wait that the code asked for.
+  // Run the wait timers at once, and keep the wait that the code asked for.
+  // The stall timer and the storage node limit are 60 seconds or more. They do not run.
   const waits = [];
-  t.mock.method(globalThis, 'setTimeout', (fn, ms) => { waits.push(ms); queueMicrotask(fn); return 0; });
+  t.mock.method(globalThis, 'setTimeout', (fn, ms) => {
+    if (ms >= 60_000) return 0;
+    waits.push(ms);
+    queueMicrotask(fn);
+    return 0;
+  });
   let nodeBytes = bytes;
   let nodeReads = 0;
   const readFromNodes = async (client, signal) => {
@@ -75,7 +81,7 @@ test('a download tries the aggregator 4 times, then reads from the storage nodes
 
   assert.deepEqual(await fetchBlob(suiClient, 'testnet', net, blobId, options), bytes);
   assert.equal(calls, 4);
-  assert.deepEqual(waits.filter((ms) => ms !== 60_000), [2000, 4000, 8000]);
+  assert.deepEqual(waits, [2000, 4000, 8000]);
   assert.deepEqual(events, ['retry 1/4 2000', 'retry 2/4 4000', 'retry 3/4 8000', 'fallback fetch failed']);
   assert.equal(nodeReads, 1);
 
