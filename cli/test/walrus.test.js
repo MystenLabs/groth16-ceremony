@@ -89,6 +89,18 @@ test('a download tries the aggregator 4 times, then reads from the storage nodes
   });
 });
 
+test('a read from the storage nodes that does not end stops at the limit', async (t) => {
+  const suiClient = new SuiGrpcClient({ network: 'testnet', baseUrl: 'https://sui.example' });
+  t.mock.method(globalThis, 'fetch', async () => { throw new TypeError('fetch failed'); });
+  // This read ignores the signal, as some steps of the SDK do.
+  const readFromNodes = () => new Promise(() => {});
+  const net = { aggregator: 'https://aggregator.example' };
+  await assert.rejects(
+    fetchBlob(suiClient, 'testnet', net, 'blob', { tries: 1, nodeReadMs: 20, readFromNodes }),
+    /from the aggregator \(fetch failed\) and from the storage nodes \(storage nodes sent no blob in 0\.02 seconds\)/,
+  );
+});
+
 test('a download stops when the aggregator sends no data', async (t) => {
   const suiClient = new SuiGrpcClient({ network: 'testnet', baseUrl: 'https://sui.example' });
   let calls = 0;

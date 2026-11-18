@@ -31,7 +31,12 @@ export async function fetchBlob(suiClient, networkName, net, blobId, {
   }
   onFallback({ error: aggregatorError });
   try {
-    const bytes = await readFromNodes(walrusClient, AbortSignal.timeout(nodeReadMs));
+    // The SDK does not stop each step at the signal. So the limit is also a race.
+    const signal = AbortSignal.timeout(nodeReadMs);
+    const limit = new Promise((_resolve, reject) => {
+      signal.addEventListener('abort', () => reject(new Error(`storage nodes sent no blob in ${nodeReadMs / 1000} seconds`)));
+    });
+    const bytes = await Promise.race([readFromNodes(walrusClient, signal), limit]);
     return await checkBlob(walrusClient, blobId, bytes, 'storage nodes');
   } catch (e) {
     throw new Error(
