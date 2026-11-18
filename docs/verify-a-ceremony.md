@@ -16,6 +16,8 @@ folder of [`ceremonies/`](../ceremonies/). Its `ceremony.json` gives the network
 ceremony object ID, and the Walrus blob ID of the phase-1 file. The audit downloads each
 file from Walrus. If you have the phase-1 file already, give it with `--ptau <file>`.
 
+On macOS, type the command. macOS can stop a command that you paste from a web page.
+
 ## What the audit checks
 
 1. The R1CS file from Walrus and the phase-1 file are the files that the ceremony
