@@ -1,5 +1,6 @@
 {
   "title": "zkLogin v2 trusted-setup ceremony",
   "network": "mainnet",
-  "ceremonyId": "0xed7a3922c4eb8c7efa4392b5918118ef73f865a362a54d1260c0cbbc83e6bb71"
+  "ceremonyId": "0xed7a3922c4eb8c7efa4392b5918118ef73f865a362a54d1260c0cbbc83e6bb71",
+  "phase1BlobId": "8V0atXFR_OLyOzdVtLQ9IN6H88PQmgE9YgSD7BbeqIE"
 }

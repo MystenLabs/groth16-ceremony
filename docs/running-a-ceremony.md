@@ -130,7 +130,8 @@ node coordinator/src/attestor.js --run "$RUN" --network "$NETWORK" --port 8090
 
 Add a folder `ceremonies/<name>/` for the ceremony and commit it. It has two files:
 
-- `ceremony.json` with the title, the network, and the ceremony object ID.
+- `ceremony.json` with the title, the network, and the ceremony object ID. Add `phase1BlobId`,
+  the Walrus blob ID of the phase-1 file, so that the audit can download the file.
 - `README.md` with the instructions for the contributors.
 
 Restart the attestor after you add the folder. It reads the title for the status page at startup.
@@ -175,6 +176,10 @@ node coordinator/src/audit.js --run "$RUN" --network "$NETWORK"
 
 The audit downloads the public files and checks the complete chain against the
 on-chain record. It prints `audit OK` when each check passes.
+
+The same command also works during the contributions. It then checks the accepted
+contributions up to now and prints `audit OK so far`.
+[Verify a ceremony](verify-a-ceremony.md) describes both cases for an external auditor.
 
 ### 9. Consider an immutable package
 

@@ -16,7 +16,7 @@ decisions. Then follow their calls into the other files.
 | --- | --- |
 | `verify_contribution.js` | The verification sequence of one contribution, the check of the submitted hash, the accept or reject verdict, and the check that the base files belong to the ceremony |
 | `seal.js` | The check of the beacon input, the construction of the final files, and their verification before release |
-| `audit.js` | The checks of a closed ceremony: the commitments of the input files, the contribution history, the final beacon, the byte equality of the final parameters, and the equality of the verification key |
+| `audit.js` | The checks of a closed ceremony: the commitments of the input files, the contribution history, the final beacon, the byte equality of the final parameters, and the equality of the verification key. Also the checks of a ceremony in progress: the same commitments and history, and the verification of the head from the genesis zkey |
 | `snarkjs.js` | The snarkjs adapter: genesis construction, conversion between compressed parameters and a full zkey, the head-extension check, the full verification, beacon application, verification-key export, and the metadata of contributions, circuit, and beacon |
 | `walrus.js` | The Walrus SDK and CLI calls, local content identifiers, `SharedBlob` resolution, the certification and retention checks, the storage parameters, and upload, download, and cache handling |
 | `commitments.js` | SHA-256 and BLAKE2b file hashes, and the validation of the phase-1 commitment |
