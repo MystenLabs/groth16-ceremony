@@ -534,7 +534,17 @@ async function cmdContribute(ceremonyId, opts) {
     // 5. Download.
     stage = 'download';
     ui.start('download', 'fetching the latest parameters from Walrus');
-    const dl = await timed(() => fetchBlob(suiClient, network, net, predBlob));
+    const dl = await timed(() => fetchBlob(suiClient, network, net, predBlob, {
+      onRetry: ({ attempt, tries, waitMs, error }) => {
+        // The screen shows a plain line. The log file also keeps the error.
+        ui.detail(`download try ${attempt} of ${tries} failed: ${errorMessage(error)}`);
+        ui.note(`The download failed. Try ${attempt + 1} of ${tries} starts in ${waitMs / 1000} seconds.`);
+      },
+      onFallback: ({ error }) => {
+        ui.detail(`the aggregator download failed: ${errorMessage(error)}`);
+        ui.note('The download now reads from the Walrus storage nodes. This can take a minute.');
+      },
+    }));
     timings.downloadsec = dl.sec;
     let bytes = dl.out;
     ui.done(`${fmtMB(bytes.length)} in ${formatDuration(dl.sec * 1000)}`);
