@@ -1,23 +1,48 @@
 // Walrus dependency boundary for the ceremony contributor. Review SharedBlob
 // resolution, aggregator downloads, and upload/storage policy here.
 // Callers supply network configuration and own contribution orchestration.
-// Aggregator bytes are checked against the content ID resolved from chain.
+// Downloaded bytes are checked against the content ID resolved from chain.
 import { Transaction } from '@mysten/sui/transactions';
 import { WalrusClient, blobIdFromInt } from '@mysten/walrus';
 import { signTransaction } from './crypto.js';
 
-// Download a blob. A try stops when no data arrives for `stallMs`, because the turn continues during a stall.
-export async function fetchBlob(suiClient, networkName, net, blobId, { tries = 3, stallMs = 60_000, waitMs = 2000 } = {}) {
-  for (let attempt = 1; ; attempt++) {
-    try { return await fetchBlobOnce(suiClient, networkName, net, blobId, stallMs); }
+// Download a blob and check its bytes against `blobId`.
+//
+// 1. Ask the aggregator. This is one HTTPS request, and it is the fast path.
+// 2. After a failed try, wait and try again. The wait doubles: 2, 4 and 8 seconds.
+// 3. If each try fails, read the blob from the storage nodes with the SDK.
+//    That read does not use the aggregator. In one test, it took 33 seconds for 123 MiB.
+// A test gives its own `readFromNodes`.
+export async function fetchBlob(suiClient, networkName, net, blobId, {
+  tries = 4, stallMs = 60_000, waitMs = 2000, nodeReadMs = 300_000, onRetry = () => {}, onFallback = () => {},
+  readFromNodes = (client, signal) => client.readBlob({ blobId, signal }),
+} = {}) {
+  const walrusClient = new WalrusClient({ network: networkName, suiClient });
+  let aggregatorError;
+  for (let attempt = 1; attempt <= tries; attempt++) {
+    try { return await checkBlob(walrusClient, blobId, await aggregatorBytes(net, blobId, stallMs), 'aggregator'); }
     catch (e) {
-      if (attempt >= tries) throw e;
-      await new Promise((r) => setTimeout(r, waitMs));
+      aggregatorError = e;
+      if (attempt === tries) break;
+      const wait = waitMs * 2 ** (attempt - 1);
+      onRetry({ attempt, tries, waitMs: wait, error: e });
+      await new Promise((r) => setTimeout(r, wait));
     }
+  }
+  onFallback({ error: aggregatorError });
+  try {
+    const bytes = await readFromNodes(walrusClient, AbortSignal.timeout(nodeReadMs));
+    return await checkBlob(walrusClient, blobId, bytes, 'storage nodes');
+  } catch (e) {
+    throw new Error(
+      `download failed from the aggregator (${aggregatorError.message}) and from the storage nodes (${e.message})`,
+      { cause: aggregatorError },
+    );
   }
 }
 
-async function fetchBlobOnce(suiClient, networkName, net, blobId, stallMs) {
+// Download from the aggregator. A try stops when no data arrives for `stallMs`, because the turn continues during a stall.
+async function aggregatorBytes(net, blobId, stallMs) {
   const controller = new AbortController();
   let timer;
   // Start the stall timer again. A slow download that still moves has no time limit.
@@ -25,7 +50,6 @@ async function fetchBlobOnce(suiClient, networkName, net, blobId, stallMs) {
     clearTimeout(timer);
     timer = setTimeout(() => controller.abort(new Error(`aggregator sent no data for ${stallMs / 1000} seconds`)), stallMs);
   };
-  let bytes;
   arm();
   try {
     const res = await fetch(`${net.aggregator}/v1/blobs/${blobId}`, { signal: controller.signal });
@@ -33,13 +57,16 @@ async function fetchBlobOnce(suiClient, networkName, net, blobId, stallMs) {
     const chunks = [];
     for await (const chunk of res.body) { chunks.push(chunk); arm(); }
     const all = Buffer.concat(chunks);
-    bytes = new Uint8Array(all.buffer, all.byteOffset, all.length);
+    return new Uint8Array(all.buffer, all.byteOffset, all.length);
   } finally {
     clearTimeout(timer);
   }
-  const walrusClient = new WalrusClient({ network: networkName, suiClient });
+}
+
+// The content ID comes from the chain. So the source of the bytes needs no trust.
+async function checkBlob(walrusClient, blobId, bytes, source) {
   const { blobId: actualBlobId } = await walrusClient.computeBlobMetadata({ bytes });
-  if (actualBlobId !== blobId) throw new Error(`aggregator returned wrong blob for ${blobId}`);
+  if (actualBlobId !== blobId) throw new Error(`${source} returned wrong blob for ${blobId}`);
   return bytes;
 }
 

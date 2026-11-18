@@ -12,6 +12,8 @@ test('aggregator downloads verify content before returning bytes', async (t) => 
   const bytes = new TextEncoder().encode('ceremony predecessor params');
   const { blobId } = await client.computeBlobMetadata({ bytes, numShards });
   t.mock.method(WalrusClient.prototype, 'systemState', async () => ({ committee: { n_shards: numShards } }));
+  // The storage nodes also fail. So each aggregator fault is the result of the download.
+  const readFromNodes = async () => { throw new Error('storage nodes are not available'); };
   const net = { aggregator: 'https://aggregator.example' };
   let responseBytes = bytes;
   let status = 200;
@@ -24,19 +26,67 @@ test('aggregator downloads verify content before returning bytes', async (t) => 
 
   responseBytes = bytes.slice();
   responseBytes[0] ^= 1;
-  await assert.rejects(fetchBlob(suiClient, 'testnet', net, blobId, { waitMs: 1 }), /aggregator returned wrong blob/);
+  await assert.rejects(fetchBlob(suiClient, 'testnet', net, blobId, { waitMs: 1, readFromNodes }), /aggregator returned wrong blob/);
 
   responseBytes = bytes.subarray(0, bytes.length - 1);
-  await assert.rejects(fetchBlob(suiClient, 'testnet', net, blobId, { waitMs: 1 }), /aggregator returned wrong blob/);
+  await assert.rejects(fetchBlob(suiClient, 'testnet', net, blobId, { waitMs: 1, readFromNodes }), /aggregator returned wrong blob/);
 
   status = 503;
-  await assert.rejects(fetchBlob(suiClient, 'testnet', net, blobId, { waitMs: 1 }), /HTTP 503/);
+  await assert.rejects(fetchBlob(suiClient, 'testnet', net, blobId, { waitMs: 1, readFromNodes }), /HTTP 503/);
 
   // One failed try, then a good answer.
   let calls = 0;
   t.mock.method(globalThis, 'fetch', async () => new Response(bytes, { status: ++calls === 1 ? 503 : 200 }));
-  assert.deepEqual(await fetchBlob(suiClient, 'testnet', net, blobId, { waitMs: 1 }), bytes);
+  assert.deepEqual(await fetchBlob(suiClient, 'testnet', net, blobId, { waitMs: 1, readFromNodes }), bytes);
   assert.equal(calls, 2);
+});
+
+test('a download tries the aggregator 4 times, then reads from the storage nodes', async (t) => {
+  const numShards = 10;
+  const suiClient = new SuiGrpcClient({ network: 'testnet', baseUrl: 'https://sui.example' });
+  const client = new WalrusClient({ network: 'testnet', suiClient });
+  const bytes = new TextEncoder().encode('ceremony predecessor params');
+  const { blobId } = await client.computeBlobMetadata({ bytes, numShards });
+  t.mock.method(WalrusClient.prototype, 'systemState', async () => ({ committee: { n_shards: numShards } }));
+  let calls = 0;
+  // The name of the aggregator does not resolve. This is the fault that a contributor had.
+  t.mock.method(globalThis, 'fetch', async () => {
+    calls++;
+    throw new TypeError('fetch failed', { cause: new Error('getaddrinfo ENOTFOUND aggregator.example') });
+  });
+  // Run the timers at once, and keep the wait that the code asked for.
+  const waits = [];
+  t.mock.method(globalThis, 'setTimeout', (fn, ms) => { waits.push(ms); queueMicrotask(fn); return 0; });
+  let nodeBytes = bytes;
+  let nodeReads = 0;
+  const readFromNodes = async (client, signal) => {
+    assert.ok(client instanceof WalrusClient);
+    assert.ok(signal instanceof AbortSignal);
+    nodeReads++;
+    return nodeBytes;
+  };
+  const events = [];
+  const net = { aggregator: 'https://aggregator.example' };
+  const options = {
+    readFromNodes,
+    onRetry: (r) => events.push(`retry ${r.attempt}/${r.tries} ${r.waitMs}`),
+    onFallback: ({ error }) => events.push(`fallback ${error.message}`),
+  };
+
+  assert.deepEqual(await fetchBlob(suiClient, 'testnet', net, blobId, options), bytes);
+  assert.equal(calls, 4);
+  assert.deepEqual(waits.filter((ms) => ms !== 60_000), [2000, 4000, 8000]);
+  assert.deepEqual(events, ['retry 1/4 2000', 'retry 2/4 4000', 'retry 3/4 8000', 'fallback fetch failed']);
+  assert.equal(nodeReads, 1);
+
+  // Bytes from the storage nodes get the same check as bytes from the aggregator.
+  nodeBytes = bytes.slice();
+  nodeBytes[0] ^= 1;
+  await assert.rejects(fetchBlob(suiClient, 'testnet', net, blobId, { readFromNodes }), (e) => {
+    assert.match(e.message, /from the aggregator \(fetch failed\) and from the storage nodes \(storage nodes returned wrong blob/);
+    assert.equal(e.cause.cause.message, 'getaddrinfo ENOTFOUND aggregator.example');
+    return true;
+  });
 });
 
 test('a download stops when the aggregator sends no data', async (t) => {
@@ -46,7 +96,8 @@ test('a download stops when the aggregator sends no data', async (t) => {
     calls++;
     signal.addEventListener('abort', () => reject(signal.reason));
   }));
+  const readFromNodes = async () => { throw new Error('storage nodes are not available'); };
   const net = { aggregator: 'https://aggregator.example' };
-  await assert.rejects(fetchBlob(suiClient, 'testnet', net, 'blob', { tries: 2, stallMs: 20, waitMs: 1 }), /sent no data/);
+  await assert.rejects(fetchBlob(suiClient, 'testnet', net, 'blob', { tries: 2, stallMs: 20, waitMs: 1, readFromNodes }), /sent no data/);
   assert.equal(calls, 2);
 });
