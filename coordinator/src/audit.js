@@ -86,9 +86,9 @@ async function findPtau(blobCache) {
 // The genesis zkey for the audit of a ceremony in progress.
 // The same r1cs and phase-1 files always give the same genesis zkey.
 async function ensureBaseZkey(runDir, r1cs, ptau) {
-  // With --run, the organizer audits with the genesis of the run folder.
+  // With --run, the organizer audits with the genesis of the run folder. --fresh builds a new one.
   const runZkey = paths && path.join(paths.artifacts, 'circuit_0000.zkey');
-  if (runZkey && fs.existsSync(runZkey)) {
+  if (!o.fresh && runZkey && fs.existsSync(runZkey)) {
     log(`genesis zkey from the run folder ${runZkey}`);
     return runZkey;
   }

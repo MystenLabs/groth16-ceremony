@@ -31,7 +31,8 @@ The audit prints `audit OK so far` during the ceremony, and `audit OK` after its
 It stops at the first check that fails and prints the reason.
 
 During the ceremony, the first audit builds the start parameters, which is the longest
-step. A later audit uses them again.
+step. A later audit uses them again. Use `--fresh` to build them again and to download
+each file again.
 
 ## What the audit does not show
 
