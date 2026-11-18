@@ -56,6 +56,7 @@ import { buildFinalBeaconContribution } from './lib/seal.js';
 import { readEnrollmentRequests, summarizeEnrollmentRequests } from './lib/enrollment_requests.js';
 import { readContributorNames, slotLabel } from './lib/status.js';
 import { createFundingService } from './lib/funding.js';
+import { ensureSuiCoinObject } from './lib/gas-coin.js';
 import { fundingDefaults, parseCoinAmount } from './lib/funding-policy.js';
 import { updateFundingConfig, privateFundingUrl, requirePublicCoordinatorUrl } from './lib/funding-config.js';
 import { PERMISSIONED, PERMISSIONLESS } from './lib/access-mode.js';
@@ -289,6 +290,7 @@ async function startPhase2() {
   fs.readSync(fd, header, 0, header.length, 0);
   fs.closeSync(fd);
   const magic = header.toString();
+  await ensureSuiCoinObject(client, kp, log);
   log(`uploading genesis ${o.genesis} (${(size / 1048576).toFixed(2)} MB, magic "${magic}") to Walrus via CLI…`);
   const { sharedBlobId, contentBlobId: blob } = await writeBlob(o.network, client, o.genesis, { label: 'genesis', workdir: WORKDIR });
   log(`genesis content blob ${blob} (SharedBlob ${sharedBlobId})`);
@@ -356,6 +358,7 @@ async function seal() {
     log,
   });
 
+  await ensureSuiCoinObject(client, kp, log);
   log(`uploading final params ${sealed.sealedP2c} to Walrus via CLI...`);
   const paramsBlob = await writeBlob(o.network, client, sealed.sealedP2c, { label: 'final params', workdir: WORKDIR });
 

@@ -27,6 +27,9 @@ Check these items on the machine that runs the coordinator:
   and WAL. Each command that signs stops if the active address is not the address in `state.json`.
 - **Walrus CLI.** The `walrus` binary and its configuration are for the network of the
   ceremony. `coordinator/scripts/install-walrus.sh` installs the testnet release by default.
+  The Walrus CLI pays only from coin objects, not from the address balance of the wallet.
+  `create.js`, `start-phase2` and `seal` make a SUI coin object when the wallet has none.
+  Keep the WAL for the uploads in coin objects.
 - **Supervisor.** A supervisor, for example a systemd unit, restarts the attestor after
   a crash. A terminal multiplexer session does not do that.
 - **Disk.** The attestor keeps each submitted file in `blobs/`, also a rejected one.

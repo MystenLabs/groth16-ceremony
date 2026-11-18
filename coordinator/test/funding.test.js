@@ -7,6 +7,7 @@ import { once } from 'node:events';
 import { spawnSync } from 'node:child_process';
 import { fundingSecretMatches } from '../src/crypto/funding_secret.js';
 import { updateFundingConfig, readFundingConfig, privateFundingUrl, requirePublicCoordinatorUrl } from '../src/lib/funding-config.js';
+import { net } from '../src/lib/config.js';
 import { withRunLock, withWalletOperation, trackedPayout, normalizeFundingAddress } from '../src/lib/funding-store.js';
 import { buildFundingTransaction, createFundingService } from '../src/lib/funding.js';
 import { startCoordinatorHttpServer } from '../src/coordinator_http.js';
@@ -212,21 +213,20 @@ test('manual enrollment rejects new permissionless payouts but recovers existing
   assert.equal((await service.fund(address)).digest, payoutDigest);
 });
 
-test('funding transaction includes enrollment and both transfers, handling WAL pagination', async () => {
-  const calls = [];
-  const client = { core: { listCoins: async ({ cursor }) => {
-    calls.push(cursor);
-    return cursor ? { objects: [{ objectId: normalizeFundingAddress('0x2'), balance: '280000000' }], hasNextPage: false } : { objects: [{ objectId: normalizeFundingAddress('0x1'), balance: '20000000' }], hasNextPage: true, cursor: 'next' };
-  } } };
+test('funding transaction includes enrollment and both transfers, with WAL from each source', async () => {
+  const client = { core: { getBalance: async () => ({ balance: { balance: '300000000', coinBalance: '20000000', addressBalance: '280000000' } }) } };
   const opts = { client, owner: address, network: 'testnet', packageId: '0xc', ceremonyId, capId: '0xd', address };
-  const tx = await buildFundingTransaction({ ...opts, enroll: true });
+  const tx = await buildFundingTransaction({ ...opts, enroll: true, wal: 300000000n });
   const commands = tx.getData().commands;
   assert.equal(commands[0].MoveCall.function, 'add_contributors');
   assert.equal(commands.filter((c) => c.TransferObjects).length, 2);
-  assert.equal(commands.filter((c) => c.MergeCoins).length, 1);
-  assert.deepEqual(calls, [null, 'next']);
+  // The SDK resolves this request to coin objects and the address balance at build time.
+  const request = commands.find((c) => c.$Intent?.name === 'CoinWithBalance');
+  assert.equal(request.$Intent.data.type, net('testnet').walCoinType);
+  assert.equal(BigInt(request.$Intent.data.balance), 300000000n);
   const openTx = await buildFundingTransaction({ ...opts, enroll: false });
   assert.equal(openTx.getData().commands.some((c) => c.MoveCall), false);
+  await assert.rejects(buildFundingTransaction({ ...opts, enroll: false, wal: 300000001n }), /organizer has insufficient WAL/);
 });
 
 test('HTTP authenticates funding independently of the public URL and reloads disabled/rotated configuration', async (t) => {
@@ -284,14 +284,18 @@ test('automatic payout overrides reach transaction amounts and survive restarts 
   const builtAmounts = [];
   t.mock.method(Transaction.prototype, 'build', async function () {
     const data = this.getData();
-    builtAmounts.push(data.commands.filter((command) => command.SplitCoins).flatMap((command) =>
-      command.SplitCoins.amounts.map((amount) => Buffer.from(data.inputs[amount.Input].Pure.bytes, 'base64').readBigUInt64LE())));
+    // The SUI amount is a split of the gas coin. The WAL amount is a request to the SDK.
+    const suiAmounts = data.commands.filter((command) => command.SplitCoins).flatMap((command) =>
+      command.SplitCoins.amounts.map((amount) => Buffer.from(data.inputs[amount.Input].Pure.bytes, 'base64').readBigUInt64LE()));
+    const walAmounts = data.commands.filter((command) => command.$Intent?.name === 'CoinWithBalance')
+      .map((command) => BigInt(command.$Intent.data.balance));
+    builtAmounts.push([...suiAmounts, ...walAmounts]);
     return bytes;
   });
   let sends = 0;
   const client = { core: {
     getObject: async () => ({ object: { json: { permissioned: true, phase: { '@variant': 'Phase2Contribute' } } } }),
-    listCoins: async () => ({ objects: [{ objectId: normalizeFundingAddress('0x2'), balance: '1000000000' }], hasNextPage: false }),
+    getBalance: async () => ({ balance: { balance: '1000000000', coinBalance: '1000000000', addressBalance: '0' } }),
     executeTransaction: async () => { sends++; return { Transaction: { digest, status: { success: true } } }; },
     waitForTransaction: async () => {},
     getTransaction: async () => { throw new Error('pending transaction not found yet'); },
