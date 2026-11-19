@@ -20,7 +20,7 @@
   "dependencies": {
     "@mysten/sui": "^2",
     "@mysten/walrus": "^1",
-    "snarkjs": "git+https://github.com/MystenLabs/snarkjs.git#e46b10b17ab3a16a9056c433b63445984a16d59e"
+    "snarkjs": "git+https://github.com/MystenLabs/snarkjs.git#6aec3cfa916092dfb86f9c7a818a779891c4e0ef"
   },
   "devDependencies": {
     "@iden3/binfileutils": "0.0.12",
