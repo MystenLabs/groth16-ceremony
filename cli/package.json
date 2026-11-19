@@ -13,6 +13,6 @@
   "dependencies": {
     "@mysten/sui": "^2",
     "@mysten/walrus": "^1",
-    "snarkjs": "git+https://github.com/MystenLabs/snarkjs.git#25fb16735310abb4ac36025ea09dbdd63976723a"
+    "snarkjs": "git+https://github.com/MystenLabs/snarkjs.git#4098b5d412478afd6807ff4014b565d281a50db0"
   }
 }

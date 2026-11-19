@@ -14,13 +14,11 @@ jobs:
       - uses: actions/checkout@v7
 
       # Each package supports the LTS majors that the test matrix below runs.
-      # The coordinator does not run on Node.js 26: a file handle that the
-      # garbage collector closes is an error there (DEP0137).
       - name: enforce supported Node versions
         run: |
           node -e "
             const fs = require('fs');
-            const expected = { coordinator: '^22 || ^24', cli: '^22 || ^24 || ^26' };
+            const expected = { coordinator: '^22 || ^24 || ^26', cli: '^22 || ^24 || ^26' };
             for (const [pkg, range] of Object.entries(expected)) {
               const actual = require('./' + pkg + '/package.json').engines?.node;
               if (actual !== range) { console.error(pkg + ' engines.node:', actual, '(expected ' + range + ')'); process.exit(1); }
@@ -52,6 +50,7 @@ jobs:
           # Keep this list equal to the engines ranges and the launcher check.
           - { package: coordinator, node: 22 }
           - { package: coordinator, node: 24 }
+          - { package: coordinator, node: 26 }
           - { package: cli, node: 22 }
           - { package: cli, node: 24 }
           - { package: cli, node: 26 }
