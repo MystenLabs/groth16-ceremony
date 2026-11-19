@@ -127,7 +127,6 @@ node coordinator/src/attestor.js --run "$RUN" --network "$NETWORK" --port 8090
 - A verification that stops or exceeds 10 minutes runs again. The third failure gives a reject.
 - A local fault, for example a file that the attestor cannot read, gives no verdict.
   The slot stays pending, and the attestor tries again after 60 seconds. Read the log.
-- Node.js 24 can print a `DEP0137` warning after a verification. It is not a failure.
 
 ### 6. Admit contributors
 
