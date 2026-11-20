@@ -6,15 +6,8 @@ import { parseSlotDurationMs } from '../src/lib/slot-duration.js';
 
 test('slot duration defaults to fifteen minutes and supports shorter and longer ceremonies', () => {
   assert.equal(parseSlotDurationMs(), 900000n);
-  assert.equal(parseSlotDurationMs(undefined, { permissioned: false }), 900000n);
   assert.equal(parseSlotDurationMs('1'), 1000n);
   assert.equal(parseSlotDurationMs('1200'), 1200000n);
-});
-
-test('a permissioned ceremony defaults to 5 more minutes, and an explicit value wins', () => {
-  assert.equal(parseSlotDurationMs(undefined, { permissioned: true }), 1200000n);
-  assert.equal(parseSlotDurationMs('900', { permissioned: true }), 900000n);
-  assert.throws(() => parseSlotDurationMs('3601', { permissioned: true }), /at most 3600 seconds/);
 });
 
 test('slot duration rejects zero, negative, fractional, and malformed seconds', () => {

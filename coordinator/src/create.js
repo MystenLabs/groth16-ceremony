@@ -26,7 +26,7 @@
 //   --permissionless       allow any address to contribute
 //   --permissioned         restrict contributions to an organizer-managed allowlist
 //   --allowlist <a,b,..>   initial allowed contributor addresses (requires --permissioned)
-//   --slot-duration-secs <n> positive whole seconds per claim (default: 900, or 1200 with --permissioned; maximum: 3600; for new claims)
+//   --slot-duration-secs <n> positive whole seconds per claim (default: 900; maximum: 3600; for new claims)
 //   --run <name>           ceremony run name (recommended)
 //   --manifest <file>      explicit ceremony manifest path (alternative to --run)
 //   --move-dir <dir>       Move package directory (default: ./move)
@@ -86,8 +86,8 @@ const ALLOWLIST = (o.allowlist ? o.allowlist.split(',') : []).map((a) => a.trim(
 let MODE;
 let SLOT_DURATION_MS;
 try {
+  SLOT_DURATION_MS = parseSlotDurationMs(o['slot-duration-secs']);
   MODE = selectAccessMode({ ...o, allowlist: ALLOWLIST });
-  SLOT_DURATION_MS = parseSlotDurationMs(o['slot-duration-secs'], { permissioned: MODE === PERMISSIONED });
 } catch (e) {
   console.error(e.message);
   process.exit(1);
