@@ -49,6 +49,7 @@ import { createUi, formatDuration, visibleText } from '../src/ui.js';
 import { askLine, askHidden, askYesNo } from '../src/prompt.js';
 import { displayName, nameBytes, MAX_NAME_BYTES } from '../src/display-name.js';
 import { hexToBase64 } from '../src/hash-forms.js';
+import { machineInfo } from '../src/machine.js';
 import { parseWithdrawTarget, checkWithdraw } from '../src/withdraw.js';
 import { explainFailure, errorMessage, assertTurnOpen, UPLOAD_MARGIN_MS } from '../src/failures.js';
 import { renderResultCard } from '../src/result-card.js';
@@ -336,6 +337,8 @@ async function cmdContribute(ceremonyId, opts) {
 
   const logFile = startRunLog(workdir, [opts.fundingMode.url]);
   ui.detail(`ceremony-cli ${VERSION} · node ${process.versions.node} · ${process.platform}/${process.arch}`);
+  const machine = machineInfo();
+  ui.detail(`machine: ${machine.cores} cores · ${machine.cpu} · ${machine.memory_gb} GB`);
   ui.detail(`source revision: ${process.env.CEREMONY_SOURCE_REVISION || 'unknown'}`);
   ui.detail(`network: ${network} · ceremony: ${ceremonyId} · work directory: ${path.resolve(workdir)}`);
 
@@ -464,7 +467,7 @@ async function cmdContribute(ceremonyId, opts) {
     else ui.note('This computer can go to sleep during the run. Turn off sleep until the run ends.', 'action');
 
     phase = 'funding';
-    heartbeat = startHeartbeat(coordinatorBase, () => ({ phase, currentStep: stageIndex(stage), name, ephemeralAddr: addr, ceremonyId }));
+    heartbeat = startHeartbeat(coordinatorBase, () => ({ phase, currentStep: stageIndex(stage), name, ephemeralAddr: addr, ceremonyId, ...machine }));
     ui.detail(`package ${head.packageId} · coordinator ${coordinatorBase}`);
     const log = stageLog(ui);
 
@@ -613,7 +616,7 @@ async function cmdContribute(ceremonyId, opts) {
     ui.detail(`receipt saved: ${receiptPath}`);
     await postTelemetry(coordinatorBase, {
       cli: true, status: verdict, name, ceremony_id: ceremonyId, storage: 'walrus',
-      cores: os.cpus().length, useragent: `ceremony-cli/${VERSION} node/${process.versions.node} ${process.platform}`,
+      ...machine, useragent: `ceremony-cli/${VERSION} node/${process.versions.node} ${process.platform}`,
       bytesize: p2c.length, hash: hashHex, blob_id: contentBlobId, ephemeral_addr: addr, ...timings,
     });
 
@@ -645,7 +648,7 @@ async function cmdContribute(ceremonyId, opts) {
     ui.close();
     recordRunLog(`failed during ${stage || 'setup'}: ${message}`);
     if (err?.stack) recordRunLog(err.stack);
-    await postTelemetry(coordinatorBase, { cli: true, status: 'error', name, step: stageIndex(stage), error: message.slice(0, 500), ephemeral_addr: addr, ...timings });
+    await postTelemetry(coordinatorBase, { cli: true, status: 'error', name, step: stageIndex(stage), error: message.slice(0, 500), ephemeral_addr: addr, ...machine, ...timings });
     const { title, lines } = explainFailure(err, { address: addr, network, stage });
     printFailure(ui, title, [...lines, '', `Log: ${shortPath(logFile)}`]);
     process.exitCode = 1;

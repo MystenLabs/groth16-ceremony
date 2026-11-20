@@ -87,7 +87,8 @@ node coordinator/src/create.js --run "$RUN" --network "$NETWORK" \
 - `--permissioned [--allowlist 0xA,0xB]` makes a ceremony with an allowlist.
 - Without `--auditors`, no person must approve the R1CS file. Use that only for a rehearsal.
 - `--slot-duration-secs` sets the time limit of one turn. The default is 900 seconds,
-  and the maximum is 3600.
+  or 1200 seconds with `--permissioned`, and the maximum is 3600. For a live ceremony,
+  `admin.js set-slot-duration` changes it for the next claims.
 - `create.js` uses the package in `move/Published.toml` if it is equal to the compiled
   `move/` folder. If not, it asks before it publishes a new package.
 
