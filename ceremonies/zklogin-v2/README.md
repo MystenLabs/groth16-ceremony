@@ -17,7 +17,9 @@ The [status page](https://zkceremony.sui.io/status) shows the ceremony state and
   fees are paid.
 - You need Git and Node.js 22, 24, or 26. With nvm: `nvm install 24 && nvm use 24`.
 - You need a machine that can stay on for your turn. Keep the terminal open and the laptop lid up.
-- Your turn takes 7 to 10 minutes. If other contributors are before you, you wait first.
+- Use a machine with 6 or more CPU cores and 8 GB or more of memory. With 4 cores or fewer,
+  the turn can end before your contribution is complete.
+- Your turn takes 3 to 10 minutes on such a machine. If other contributors are before you, you wait first.
 
 ## Contribute
 
@@ -56,7 +58,7 @@ The steps are:
 2. **Wait for your turn.** One contributor has the slot at a time. The CLI claims the slot when it is free.
    A wait is normal, and the CLI shows an estimate. During the wait, you can leave the CLI
    running. You can also stop it and run the same command again later.
-   A turn has a time limit of 15 minutes, from the claim to the submission.
+   A turn has a time limit of 20 minutes, from the claim to the submission.
    The CLI does not start the upload with less than 3 minutes left in the turn.
 3. **Download.** It gets the current parameters from Walrus, about 123 MB, and checks them
    against the content ID on-chain.
@@ -160,7 +162,7 @@ the key in `state.json` has no more use. Keep the receipt.
 | R1CS on Walrus | Blob id `kQP5kFOpd6GN48C5B2vBaZqWwyEaeIHrGc9Eb4x_Ods`. The `r1cs_blob_id` field of the ceremony object is the shared blob object `0xa30ba93ee67719f124f4b1b374e3123d4679ddc97121cb948928c131a9341991`. |
 | Network | Sui mainnet |
 | Access | Permissioned now: the organizer adds each contributor to the allowlist. The organizer will change it to permissionless for the open period. The `permissioned` field of the ceremony object shows the current mode. |
-| Turn length | 15 minutes |
+| Turn length | 20 minutes |
 | Ceremony object | `0xed7a3922c4eb8c7efa4392b5918118ef73f865a362a54d1260c0cbbc83e6bb71`, also in [`ceremony.json`](ceremony.json) |
 | Move package | `0x59c61edc0603f301b0295a5d2a9ace510bd26df2c4ca64c8dc91aecc75d08a28` |
 | Phase 1 | Contribution `0086` of the Perpetual Powers of Tau, reduced from 2^28 to 2^21, with drand round 6440000 as the final beacon. Its chain has 67 contributions, because the chain continues from contribution `0058` at contribution `0078`. |
